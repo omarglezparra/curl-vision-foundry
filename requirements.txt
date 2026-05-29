@@ -1,0 +1,10 @@
+azure-ai-projects
+azure-ai-ml
+azure-identity
+python-dotenv
+opencv-python
+mediapipe
+numpy
+pandas
+scikit-learn
+matplotlib
