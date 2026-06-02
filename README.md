@@ -90,3 +90,26 @@ The coach compares the current set against your own baseline and writes:
 
 The report includes effort score, fatigue level, failure risk, estimated reps in
 reserve, and recommended reps remaining.
+
+## iPhone Capture App
+
+The `mobile/` folder contains a simple Expo app for collecting labeled workout
+clips with the iPhone front camera.
+
+```powershell
+cd mobile
+npm install
+npm start
+```
+
+Open the QR code with Expo Go on your iPhone. The app guides you through:
+
+- Curl perfecto
+- Curl ladeado
+- Hombro adelante
+- Rep parcial
+- Fatiga real
+
+Each drill uses the front camera and saves labeled clips to the iPhone Photos
+album `Curl Vision Foundry`. These clips are for building a personal ergonomics
+and fatigue dataset before training a custom model.

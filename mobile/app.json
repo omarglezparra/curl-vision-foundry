@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Curl Vision Foundry",
+    "slug": "curl-vision-foundry-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Curl Vision Foundry uses the front camera to capture exercise videos for your personal coach dataset.",
+        "NSPhotoLibraryUsageDescription": "Curl Vision Foundry saves workout clips so you can use them to train your personal coach.",
+        "NSPhotoLibraryAddUsageDescription": "Curl Vision Foundry saves labeled exercise clips to your photo library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
