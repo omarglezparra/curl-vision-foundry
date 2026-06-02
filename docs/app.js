@@ -1,39 +1,16 @@
 const drills = [
-  {
-    id: "perfect_curl",
-    label: "good_form",
-    title: "Curl perfecto",
-    target: "10-12 reps limpias",
-    cues: ["Torso quieto", "Hombro estable", "Rango completo", "Tempo controlado"],
-  },
-  {
-    id: "torso_swing",
-    label: "torso_swing",
-    title: "Curl ladeado",
-    target: "8-10 reps con torso swing",
-    cues: ["Balancea el torso un poco", "Mantén el brazo visible", "No exageres"],
-  },
-  {
-    id: "shoulder_move",
-    label: "shoulder_move",
-    title: "Hombro adelante",
-    target: "8-10 reps moviendo hombro",
-    cues: ["Lleva el codo adelante", "No uses tanto torso", "Muñeca visible"],
-  },
-  {
-    id: "partial_rep",
-    label: "partial_rep",
-    title: "Rep parcial",
-    target: "8-12 reps incompletas",
-    cues: ["Sube a mitad", "Vuelve a extender", "No completes el curl"],
-  },
-  {
-    id: "fatigue",
-    label: "fatigue",
-    title: "Fatiga real",
-    target: "Serie hasta esfuerzo alto",
-    cues: ["Empieza limpio", "Sigue hasta cansarte", "Para si hay dolor"],
-  },
+  { id: "good_front", label: "good_form", angle: "front", title: "Curl perfecto - frente", target: "10-12 reps limpias", cues: ["Camara al frente", "Torso quieto", "Hombro estable", "Rango completo"] },
+  { id: "good_45", label: "good_form", angle: "45_degrees", title: "Curl perfecto - 45 grados", target: "10-12 reps limpias", cues: ["Camara a 45 grados", "Codo visible", "Muneca visible", "Tempo controlado"] },
+  { id: "good_side", label: "good_form", angle: "side", title: "Curl perfecto - lateral", target: "10-12 reps limpias", cues: ["Camara lateral", "Brazo completo visible", "Rango completo", "Sin balanceo"] },
+  { id: "torso_swing_front", label: "torso_swing", angle: "front", title: "Torso swing - frente", target: "8-10 reps con torso swing", cues: ["Camara al frente", "Balancea un poco", "No pierdas el brazo", "No exageres"] },
+  { id: "torso_swing_45", label: "torso_swing", angle: "45_degrees", title: "Torso swing - 45 grados", target: "8-10 reps con torso swing", cues: ["Camara a 45 grados", "Torso ayuda al curl", "Codo visible", "Control seguro"] },
+  { id: "shoulder_move_side", label: "shoulder_move", angle: "side", title: "Hombro adelante - lateral", target: "8-10 reps moviendo hombro", cues: ["Camara lateral", "Lleva codo adelante", "No uses tanto torso", "Muneca visible"] },
+  { id: "elbow_flare_front", label: "elbow_flare", angle: "front", title: "Codo abierto - frente", target: "8-10 reps abriendo codo", cues: ["Camara al frente", "Codo se abre hacia afuera", "Torso estable", "Movimiento claro"] },
+  { id: "partial_bottom_side", label: "partial_rep", angle: "side", title: "Rep parcial abajo", target: "8-12 reps sin subir completo", cues: ["Camara lateral", "Sube a mitad", "Vuelve a extender", "No completes arriba"] },
+  { id: "partial_top_side", label: "partial_rep", angle: "side", title: "Rep parcial arriba", target: "8-12 reps sin bajar completo", cues: ["Camara lateral", "Quedate arriba", "No extiendas abajo", "Rango corto"] },
+  { id: "fast_reps_front", label: "fast_reps", angle: "front", title: "Reps rapidas - frente", target: "10-15 reps rapidas", cues: ["Camara al frente", "Rapido pero seguro", "Mantente visible", "Sin dolor"] },
+  { id: "slow_control_45", label: "slow_control", angle: "45_degrees", title: "Tempo lento - 45 grados", target: "6-8 reps muy controladas", cues: ["Camara a 45 grados", "Sube lento", "Baja lento", "Forma limpia"] },
+  { id: "fatigue_side", label: "fatigue", angle: "side", title: "Fatiga real - lateral", target: "Serie hasta esfuerzo alto", cues: ["Camara lateral", "Empieza limpio", "Sigue hasta cansarte", "Para si hay dolor"] },
 ];
 
 const state = {
@@ -88,7 +65,7 @@ function render() {
   els.target.textContent = drill.target;
   els.counter.textContent = `${state.selectedIndex + 1}/${drills.length}`;
   els.sessionId.textContent = sessionId();
-  els.label.textContent = drill.label;
+  els.label.textContent = `${drill.label} / ${drill.angle}`;
   els.clipCount.textContent = String(state.clipCount);
   els.record.textContent = state.recording ? "Detener" : "Grabar prueba";
   els.record.classList.toggle("stop", state.recording);
@@ -179,11 +156,12 @@ function stopRecording() {
 function makeDownloads() {
   const drill = activeDrill();
   const stamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
-  const basename = `${sessionId()}_${drill.label}_${stamp}`;
+  const basename = `${sessionId()}_${drill.label}_${drill.angle}_${stamp}`;
   const videoBlob = new Blob(state.chunks, { type: "video/webm" });
   const metadata = {
     session_id: sessionId(),
     label: drill.label,
+    camera_angle: drill.angle,
     drill_id: drill.id,
     drill_title: drill.title,
     target: drill.target,

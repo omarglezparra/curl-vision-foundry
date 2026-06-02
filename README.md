@@ -108,11 +108,18 @@ https://omarglezparra.github.io/curl-vision-foundry/
 The Safari app uses the iPhone front camera, guides you through labeled drills,
 and creates video plus metadata downloads for each clip:
 
-- Curl perfecto
-- Curl ladeado
-- Hombro adelante
-- Rep parcial
-- Fatiga real
+- Curl perfecto - frente
+- Curl perfecto - 45 grados
+- Curl perfecto - lateral
+- Torso swing - frente
+- Torso swing - 45 grados
+- Hombro adelante - lateral
+- Codo abierto - frente
+- Rep parcial abajo
+- Rep parcial arriba
+- Reps rapidas - frente
+- Tempo lento - 45 grados
+- Fatiga real - lateral
 
 ### Expo Capture
 
