@@ -133,3 +133,65 @@ npm start
 
 Open the QR code with Expo Go on your iPhone. These clips are for building a
 personal ergonomics and fatigue dataset before training a custom model.
+
+## Azure Capture Pipeline
+
+The `azure/` folder contains a starter cloud pipeline:
+
+- `azure/infra/main.bicep` provisions Blob Storage and an Azure Function App.
+- `azure/functions/function_app.py` exposes:
+  - `POST /api/create-upload` to create temporary upload URLs.
+  - `POST /api/register-capture` to register uploaded video and metadata.
+- Blob containers:
+  - `captures` stores uploaded videos and metadata.
+  - `processed` stores capture manifests and future processed datasets.
+
+### Option A: Azure Function Upload API
+
+Deploy infrastructure:
+
+```powershell
+.\azure\deploy.ps1 -ResourceGroup rg-curl-vision-trainer -Location eastus
+```
+
+Then deploy the Function App code:
+
+```powershell
+cd azure/functions
+func azure functionapp publish <function-app-name>
+```
+
+After deployment, copy `docs/config.example.js` to `docs/config.js` and set:
+
+```javascript
+window.CURL_VISION_API_BASE = "https://<function-app-name>.azurewebsites.net/api";
+```
+
+Commit and push `docs/config.js`. The Safari capture app will then upload video
+and metadata to Azure automatically after each recording, while still offering
+local downloads as a fallback.
+
+### Option B: Blob Storage Prototype
+
+If Azure Functions is blocked by subscription quota, create only Blob Storage
+and a temporary upload SAS:
+
+```powershell
+.\azure\create-storage-pipeline.ps1 -ResourceGroup rg-curl-vision-trainer -Location eastus
+```
+
+Open the Safari capture app, paste the printed SAS URL into `Azure Blob SAS`,
+and tap `Guardar Azure`. Each new recording uploads:
+
+- `video.webm`
+- `metadata.json`
+
+The blobs are stored under:
+
+```text
+captures/<label>/<camera_angle>/<session_id>/<capture_id>/
+```
+
+This gives us cloud capture immediately. The later processing step can read
+these metadata files, extract pose landmarks, and feed Azure ML or Foundry
+training jobs.

@@ -40,6 +40,7 @@
           <p><span>session_id</span><strong id="session-id"></strong></p>
           <p><span>label</span><strong id="label"></strong></p>
           <p><span>clips</span><strong id="clip-count">0</strong></p>
+          <p><span>cloud</span><strong id="cloud-status">local</strong></p>
         </div>
 
         <div class="actions">
@@ -53,12 +54,19 @@
           <a id="metadata-download" download>Descargar metadata</a>
         </div>
 
+        <div class="cloud-panel">
+          <label for="azure-sas">Azure Blob SAS</label>
+          <textarea id="azure-sas" rows="3" spellcheck="false"></textarea>
+          <button id="save-azure" class="secondary" type="button">Guardar Azure</button>
+        </div>
+
         <p class="note">
-          Usa Safari en iPhone con HTTPS. Graba clips cortos, descargalos y luego los usamos para
-          entrenar el coach personal.
+          Usa Safari en iPhone con HTTPS. Graba clips cortos; la app sube a Azure si hay SAS y
+          mantiene descargas locales como respaldo.
         </p>
       </section>
     </main>
+    <script src="./config.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

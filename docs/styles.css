@@ -179,6 +179,29 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.cloud-panel {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.cloud-panel label {
+  color: #4f5c68;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.cloud-panel textarea {
+  width: 100%;
+  border: 1px solid #bcc6d0;
+  border-radius: 8px;
+  padding: 10px;
+  color: #151a1f;
+  background: #ffffff;
+  font: 12px ui-monospace, SFMono-Regular, Consolas, monospace;
+  resize: vertical;
+}
+
 .actions {
   display: grid;
   grid-template-columns: 1fr 1.7fr 1fr;

@@ -22,6 +22,7 @@ const state = {
   startedAt: 0,
   timerInterval: 0,
   clipCount: 0,
+  azureUploadCount: 0,
 };
 
 const els = {
@@ -38,13 +39,23 @@ const els = {
   sessionId: document.getElementById("session-id"),
   label: document.getElementById("label"),
   clipCount: document.getElementById("clip-count"),
+  cloudStatus: document.getElementById("cloud-status"),
   previous: document.getElementById("previous"),
   next: document.getElementById("next"),
   record: document.getElementById("record"),
   downloads: document.getElementById("downloads"),
   videoDownload: document.getElementById("video-download"),
   metadataDownload: document.getElementById("metadata-download"),
+  azureSas: document.getElementById("azure-sas"),
+  saveAzure: document.getElementById("save-azure"),
 };
+
+const apiBase = window.CURL_VISION_API_BASE || "";
+const configContainerSasUrl = window.CURL_VISION_CONTAINER_SAS_URL || "";
+
+function containerSasUrl() {
+  return (configContainerSasUrl || localStorage.getItem("curlVisionContainerSasUrl") || "").trim();
+}
 
 function todayStamp() {
   return new Date().toISOString().slice(0, 10).replaceAll("-", "");
@@ -67,6 +78,7 @@ function render() {
   els.sessionId.textContent = sessionId();
   els.label.textContent = `${drill.label} / ${drill.angle}`;
   els.clipCount.textContent = String(state.clipCount);
+  els.cloudStatus.textContent = apiBase || containerSasUrl() ? "azure ready" : "local";
   els.record.textContent = state.recording ? "Detener" : "Grabar prueba";
   els.record.classList.toggle("stop", state.recording);
   els.dot.classList.toggle("active", state.recording);
@@ -156,9 +168,11 @@ function stopRecording() {
 function makeDownloads() {
   const drill = activeDrill();
   const stamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
+  const captureId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
   const basename = `${sessionId()}_${drill.label}_${drill.angle}_${stamp}`;
   const videoBlob = new Blob(state.chunks, { type: "video/webm" });
   const metadata = {
+    capture_id: captureId,
     session_id: sessionId(),
     label: drill.label,
     camera_angle: drill.angle,
@@ -169,6 +183,8 @@ function makeDownloads() {
     created_at: new Date().toISOString(),
     source: "iphone_safari_capture",
   };
+  const blobPrefix = `${drill.label}/${drill.angle}/${metadata.session_id}/${captureId}`;
+  metadata.azure_blob_prefix = blobPrefix;
   const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], {
     type: "application/json",
   });
@@ -179,6 +195,113 @@ function makeDownloads() {
   els.metadataDownload.download = `${basename}.json`;
   els.downloads.hidden = false;
   state.clipCount += 1;
+  render();
+  uploadToAzure(videoBlob, metadataBlob, metadata).catch((error) => {
+    console.error("Azure upload failed", error);
+    alert(`Azure upload failed: ${error.message || error}`);
+  });
+}
+
+async function uploadToAzure(videoBlob, metadataBlob, metadata) {
+  if (apiBase) {
+    return uploadWithFunction(videoBlob, metadataBlob, metadata);
+  }
+  if (containerSasUrl()) {
+    return uploadWithContainerSas(videoBlob, metadataBlob, metadata);
+  }
+}
+
+async function uploadWithFunction(videoBlob, metadataBlob, metadata) {
+  els.status.textContent = "Subiendo a Azure...";
+  const createResponse = await fetch(`${apiBase}/create-upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      capture_id: metadata.capture_id,
+      session_id: metadata.session_id,
+      label: metadata.label,
+      camera_angle: metadata.camera_angle,
+    }),
+  });
+  if (!createResponse.ok) {
+    throw new Error(`create-upload ${createResponse.status}`);
+  }
+  const upload = await createResponse.json();
+
+  const videoResponse = await fetch(upload.video.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "x-ms-blob-type": "BlockBlob",
+      "Content-Type": "video/webm",
+    },
+    body: videoBlob,
+  });
+  if (!videoResponse.ok) {
+    throw new Error(`video upload ${videoResponse.status}`);
+  }
+
+  const metadataResponse = await fetch(upload.metadata.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "x-ms-blob-type": "BlockBlob",
+      "Content-Type": "application/json",
+    },
+    body: metadataBlob,
+  });
+  if (!metadataResponse.ok) {
+    throw new Error(`metadata upload ${metadataResponse.status}`);
+  }
+
+  const registerResponse = await fetch(`${apiBase}/register-capture`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      capture_id: upload.captureId,
+      session_id: metadata.session_id,
+      label: metadata.label,
+      camera_angle: metadata.camera_angle,
+      video_blob: upload.video.blobName,
+      metadata_blob: upload.metadata.blobName,
+    }),
+  });
+  if (!registerResponse.ok) {
+    throw new Error(`register-capture ${registerResponse.status}`);
+  }
+
+  state.azureUploadCount += 1;
+  els.status.textContent = `Azure upload listo (${state.azureUploadCount})`;
+  render();
+}
+
+function blobUrl(blobName) {
+  const sasUrl = containerSasUrl();
+  const [baseUrl, query] = sasUrl.split("?");
+  const cleanBase = baseUrl.replace(/\/$/, "");
+  const encodedPath = blobName.split("/").map(encodeURIComponent).join("/");
+  return `${cleanBase}/${encodedPath}?${query}`;
+}
+
+async function putBlob(blobName, blob, contentType) {
+  const response = await fetch(blobUrl(blobName), {
+    method: "PUT",
+    headers: {
+      "x-ms-blob-type": "BlockBlob",
+      "Content-Type": contentType,
+    },
+    body: blob,
+  });
+  if (!response.ok) {
+    throw new Error(`${blobName} upload ${response.status}`);
+  }
+}
+
+async function uploadWithContainerSas(videoBlob, metadataBlob, metadata) {
+  els.status.textContent = "Subiendo a Azure Blob...";
+  const prefix = metadata.azure_blob_prefix;
+  await putBlob(`${prefix}/video.webm`, videoBlob, "video/webm");
+  await putBlob(`${prefix}/metadata.json`, metadataBlob, "application/json");
+  state.azureUploadCount += 1;
+  els.status.textContent = `Azure Blob listo (${state.azureUploadCount})`;
   render();
 }
 
@@ -202,5 +325,12 @@ els.record.addEventListener("click", () => {
   }
 });
 
+els.saveAzure.addEventListener("click", () => {
+  localStorage.setItem("curlVisionContainerSasUrl", els.azureSas.value.trim());
+  els.status.textContent = containerSasUrl() ? "Azure Blob configurado" : "Azure Blob apagado";
+  render();
+});
+
+els.azureSas.value = containerSasUrl();
 render();
 startCamera();

@@ -1,0 +1,2 @@
+window.CURL_VISION_API_BASE = "";
+window.CURL_VISION_CONTAINER_SAS_URL = "";
