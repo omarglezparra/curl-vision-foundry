@@ -93,16 +93,20 @@ reserve, and recommended reps remaining.
 
 ## iPhone Capture App
 
-The `mobile/` folder contains a simple Expo app for collecting labeled workout
-clips with the iPhone front camera.
+The repo includes two mobile capture paths. The recommended fallback is the
+static Safari capture app in `docs/`, because it does not require Expo Go.
 
-```powershell
-cd mobile
-npm install
-npm start
+### Safari Capture
+
+Enable GitHub Pages for this repository using the `main` branch and `/docs`
+folder. Then open:
+
+```text
+https://omarglezparra.github.io/curl-vision-foundry/
 ```
 
-Open the QR code with Expo Go on your iPhone. The app guides you through:
+The Safari app uses the iPhone front camera, guides you through labeled drills,
+and creates video plus metadata downloads for each clip:
 
 - Curl perfecto
 - Curl ladeado
@@ -110,6 +114,15 @@ Open the QR code with Expo Go on your iPhone. The app guides you through:
 - Rep parcial
 - Fatiga real
 
-Each drill uses the front camera and saves labeled clips to the iPhone Photos
-album `Curl Vision Foundry`. These clips are for building a personal ergonomics
-and fatigue dataset before training a custom model.
+### Expo Capture
+
+The `mobile/` folder contains an Expo app for the same capture flow.
+
+```powershell
+cd mobile
+npm install
+npm start
+```
+
+Open the QR code with Expo Go on your iPhone. These clips are for building a
+personal ergonomics and fatigue dataset before training a custom model.

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Curl Vision Foundry Capture</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="camera-stage">
+        <video id="preview" playsinline muted autoplay></video>
+        <div class="camera-topbar">
+          <div>
+            <p class="eyebrow">Training capture</p>
+            <h1 id="drill-title">Curl perfecto</h1>
+          </div>
+          <div id="record-dot" class="record-dot" aria-label="recording status"></div>
+        </div>
+        <div class="camera-footer">
+          <span id="camera-status">Camara frontal lista</span>
+          <span id="timer">00:00</span>
+        </div>
+      </section>
+
+      <section class="control-panel">
+        <div id="steps" class="steps"></div>
+
+        <div class="drill-row">
+          <div>
+            <h2 id="panel-title">Curl perfecto</h2>
+            <p id="target">10-12 reps limpias</p>
+          </div>
+          <strong id="counter">1/5</strong>
+        </div>
+
+        <div id="cues" class="cues"></div>
+
+        <div class="metadata">
+          <p><span>session_id</span><strong id="session-id"></strong></p>
+          <p><span>label</span><strong id="label"></strong></p>
+          <p><span>clips</span><strong id="clip-count">0</strong></p>
+        </div>
+
+        <div class="actions">
+          <button id="previous" class="secondary" type="button">Anterior</button>
+          <button id="record" class="primary" type="button">Grabar prueba</button>
+          <button id="next" class="secondary" type="button">Siguiente</button>
+        </div>
+
+        <div id="downloads" class="downloads" hidden>
+          <a id="video-download" download>Descargar video</a>
+          <a id="metadata-download" download>Descargar metadata</a>
+        </div>
+
+        <p class="note">
+          Usa Safari en iPhone con HTTPS. Graba clips cortos, descargalos y luego los usamos para
+          entrenar el coach personal.
+        </p>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
