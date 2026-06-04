@@ -195,3 +195,30 @@ captures/<label>/<camera_angle>/<session_id>/<capture_id>/
 This gives us cloud capture immediately. The later processing step can read
 these metadata files, extract pose landmarks, and feed Azure ML or Foundry
 training jobs.
+
+## Cloud Dataset Processing
+
+Process uploaded iPhone captures into local CSV datasets:
+
+```powershell
+.\.venv\Scripts\python.exe .\src\process_azure_captures.py --frame-stride 3
+```
+
+The processor reads `captures`, downloads each `video.webm`, runs MediaPipe Pose,
+applies the deterministic curl rules, and writes:
+
+- `outputs/cloud_dataset/cloud_capture_summary.csv`
+- `outputs/cloud_dataset/cloud_curl_dataset.csv`
+
+It also uploads both CSV files to Azure Blob:
+
+```text
+processed/datasets/cloud_capture_summary.csv
+processed/datasets/cloud_curl_dataset.csv
+```
+
+Use a smaller test run with:
+
+```powershell
+.\.venv\Scripts\python.exe .\src\process_azure_captures.py --limit 1 --frame-stride 3 --no-upload-results
+```
