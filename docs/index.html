@@ -12,7 +12,7 @@
         <video id="preview" playsinline muted autoplay></video>
         <div class="camera-topbar">
           <div>
-            <p class="eyebrow">Training capture</p>
+            <p class="eyebrow">Good-form capture</p>
             <h1 id="drill-title">Curl perfecto</h1>
           </div>
           <div id="record-dot" class="record-dot" aria-label="recording status"></div>
@@ -32,8 +32,8 @@
             <p class="profile-kicker">Curl Vision Foundry</p>
             <h2>Omar Gonzalez</h2>
             <p>
-              Building a personal AI coach that learns curl form, effort, fatigue, and
-              failure risk from real training captures.
+              Building a personal AI coach that learns clean training form, effort, fatigue,
+              and failure risk from real gym captures.
             </p>
           </div>
         </section>
@@ -59,9 +59,24 @@
 
         <div class="actions">
           <button id="previous" class="secondary" type="button">Anterior</button>
-          <button id="record" class="primary" type="button">Grabar prueba</button>
+          <button id="record" class="primary" type="button">Grabar set</button>
           <button id="next" class="secondary" type="button">Siguiente</button>
         </div>
+
+        <button id="new-session" class="session-button secondary" type="button">Nueva sesion</button>
+
+        <section class="heycyan-panel">
+          <div>
+            <p class="panel-kicker">HeyCyan / BV100</p>
+            <h3>Importar video de lentes</h3>
+            <p>
+              Guarda el clip de HeyCyan en Fotos y seleccionalo aqui para subirlo al dataset.
+            </p>
+          </div>
+          <input id="heycyan-file" type="file" accept="video/*" hidden />
+          <button id="heycyan-import" class="primary" type="button">Importar HeyCyan</button>
+          <span id="heycyan-status">Esperando video</span>
+        </section>
 
         <div id="downloads" class="downloads" hidden>
           <a id="video-download" download>Descargar video</a>
@@ -75,8 +90,8 @@
         </div>
 
         <p class="note">
-          Usa Safari en iPhone con HTTPS. Graba clips cortos; la app sube a Azure si hay SAS y
-          mantiene descargas locales como respaldo.
+          Usa Safari en iPhone con HTTPS. Graba sets buenos bajo la misma sesion; la app sube a
+          Azure si hay SAS y mantiene descargas locales como respaldo.
         </p>
       </section>
     </main>

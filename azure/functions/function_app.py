@@ -81,6 +81,15 @@ def create_upload_blob(container: str, blob_name: str, content_type: str) -> dic
     return {"blobName": blob_name, "uploadUrl": url, "expiresAt": expires_at.isoformat()}
 
 
+def video_extension(mime_type: str, requested_extension: str = "") -> str:
+    extension = requested_extension.lower().strip().lstrip(".")
+    if extension in {"mp4", "webm"}:
+        return extension
+    if mime_type.startswith("video/mp4"):
+        return "mp4"
+    return "webm"
+
+
 @app.route(route="health", methods=["GET", "OPTIONS"])
 def health(req: func.HttpRequest) -> func.HttpResponse:
     origin = req.headers.get("Origin")
@@ -101,12 +110,14 @@ def create_upload(req: func.HttpRequest) -> func.HttpResponse:
         label = body["label"]
         camera_angle = body.get("camera_angle", "unknown")
         capture_id = body.get("capture_id") or str(uuid.uuid4())
+        video_mime_type = body.get("video_mime_type", "video/webm")
+        extension = video_extension(video_mime_type, body.get("video_file_extension", ""))
     except (KeyError, ValueError) as exc:
         return json_response({"error": f"Invalid request body: {exc}"}, status_code=400, origin=origin)
 
     safe_prefix = f"{label}/{camera_angle}/{session_id}/{capture_id}"
     container = setting("CAPTURE_CONTAINER", "captures")
-    video = create_upload_blob(container, f"{safe_prefix}/video.webm", "video/webm")
+    video = create_upload_blob(container, f"{safe_prefix}/video.{extension}", video_mime_type)
     metadata = create_upload_blob(container, f"{safe_prefix}/metadata.json", "application/json")
 
     return json_response(

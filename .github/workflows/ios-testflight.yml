@@ -1,0 +1,58 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number"
+        required: false
+        default: ""
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios-native/CurlVisionHeyCyan
+    env:
+      PRODUCT_BUNDLE_IDENTIFIER: ${{ secrets.IOS_BUNDLE_ID }}
+      DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+      MARKETING_VERSION: "1.0.0"
+      CURRENT_PROJECT_VERSION: ${{ inputs.build_number || github.run_number }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_FILE: ./fastlane/AuthKey.p8
+      SKIP_WAITING_FOR_BUILD_PROCESSING: "true"
+      TESTFLIGHT_GROUP: ${{ secrets.TESTFLIGHT_GROUP }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: ios-native/CurlVisionHeyCyan
+
+      - name: Write App Store Connect API key
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.APP_STORE_CONNECT_API_KEY_P8_BASE64 }}" ]; then
+            echo "APP_STORE_CONNECT_API_KEY_P8_BASE64 is missing"
+            exit 1
+          fi
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_P8_BASE64 }}" | base64 --decode > ./fastlane/AuthKey.p8
+          chmod 600 ./fastlane/AuthKey.p8
+
+      - name: Upload beta to TestFlight
+        run: bundle exec fastlane ios beta

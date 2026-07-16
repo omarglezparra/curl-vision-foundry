@@ -149,7 +149,7 @@ h1 {
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-bottom: 16px;
 }
@@ -258,6 +258,49 @@ h2 {
   display: grid;
   grid-template-columns: 1fr 1.7fr 1fr;
   gap: 10px;
+}
+
+.session-button {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.heycyan-panel {
+  margin-top: 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.panel-kicker {
+  margin: 0 0 4px;
+  color: #2076d2;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.heycyan-panel h3 {
+  margin: 0;
+  color: #151a1f;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.heycyan-panel p:last-child {
+  margin: 5px 0 0;
+  color: #59636e;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+#heycyan-status {
+  color: #4f5c68;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 button,

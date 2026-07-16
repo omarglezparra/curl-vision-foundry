@@ -25,12 +25,18 @@ CAPTURE_FIELDS = [
     "processed_at_utc",
     "capture_id",
     "session_id",
+    "workout_id",
     "label",
+    "exercise",
     "camera_angle",
+    "capture_type",
+    "training_intent",
+    "use_for_training",
     "drill_id",
     "drill_title",
     "video_blob",
     "metadata_blob",
+    "duration_seconds",
     "frames_total",
     "frames_processed",
     "frames_with_pose",
@@ -51,8 +57,13 @@ REP_FIELDS = [
     "processed_at_utc",
     "capture_id",
     "session_id",
+    "workout_id",
     "label",
+    "exercise",
     "camera_angle",
+    "capture_type",
+    "training_intent",
+    "use_for_training",
     "drill_id",
     "drill_title",
     "arm",
@@ -82,6 +93,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-path", default="outputs/models/pose_landmarker_lite.task")
     parser.add_argument("--arm", choices=["auto", "left", "right"], default="auto")
     parser.add_argument("--frame-stride", type=int, default=2, help="Process every Nth frame for speed.")
+    parser.add_argument("--exercise-filter", default="biceps_curl", help="Only process this exercise; use 'all' to process every capture.")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of captures processed.")
     parser.add_argument("--no-upload-results", action="store_true")
     return parser.parse_args()
@@ -130,8 +142,7 @@ def list_capture_prefixes(service: BlobServiceClient, container_name: str) -> li
     captures: list[dict[str, str]] = []
     for metadata_blob in sorted(metadata_blobs):
         prefix = metadata_blob[: -len("/metadata.json")]
-        video_blob = f"{prefix}/video.webm"
-        captures.append({"prefix": prefix, "metadata_blob": metadata_blob, "video_blob": video_blob})
+        captures.append({"prefix": prefix, "metadata_blob": metadata_blob})
     return captures
 
 
@@ -159,8 +170,13 @@ def rep_row(processed_at: str, metadata: dict[str, Any], arm: str, metrics) -> d
         "processed_at_utc": processed_at,
         "capture_id": metadata.get("capture_id", ""),
         "session_id": metadata.get("session_id", ""),
+        "workout_id": metadata.get("workout_id", metadata.get("session_id", "")),
         "label": metadata.get("label", ""),
+        "exercise": metadata.get("exercise", "biceps_curl"),
         "camera_angle": metadata.get("camera_angle", ""),
+        "capture_type": metadata.get("capture_type", "set"),
+        "training_intent": metadata.get("training_intent", ""),
+        "use_for_training": metadata.get("use_for_training", ""),
         "drill_id": metadata.get("drill_id", ""),
         "drill_title": metadata.get("drill_title", ""),
         "arm": arm,
@@ -244,12 +260,18 @@ def process_video(video_path: Path, metadata: dict[str, Any], landmarker: PoseLa
         "processed_at_utc": processed_at,
         "capture_id": metadata.get("capture_id", ""),
         "session_id": metadata.get("session_id", ""),
+        "workout_id": metadata.get("workout_id", metadata.get("session_id", "")),
         "label": metadata.get("label", ""),
+        "exercise": metadata.get("exercise", "biceps_curl"),
         "camera_angle": metadata.get("camera_angle", ""),
+        "capture_type": metadata.get("capture_type", "set"),
+        "training_intent": metadata.get("training_intent", ""),
+        "use_for_training": metadata.get("use_for_training", ""),
         "drill_id": metadata.get("drill_id", ""),
         "drill_title": metadata.get("drill_title", ""),
         "video_blob": "",
         "metadata_blob": "",
+        "duration_seconds": metadata.get("duration_seconds", ""),
         "frames_total": frames_total,
         "frames_processed": frames_processed,
         "frames_with_pose": frames_with_pose,
@@ -316,13 +338,19 @@ def main() -> int:
         temp_path = Path(temp_dir)
         for index, capture in enumerate(captures, start=1):
             metadata = json.loads(download_text(service, args.captures_container, capture["metadata_blob"]))
-            video_path = temp_path / f"{metadata.get('capture_id', index)}.webm"
-            print(f"[{index}/{len(captures)}] Downloading {capture['video_blob']}")
-            download_blob_to_path(service, args.captures_container, capture["video_blob"], video_path)
+            exercise = metadata.get("exercise", "biceps_curl")
+            if args.exercise_filter != "all" and exercise != args.exercise_filter:
+                print(f"[{index}/{len(captures)}] Skipping {capture['prefix']} exercise={exercise}")
+                continue
+            video_file = metadata.get("video_file", "video.webm")
+            video_blob = metadata.get("video_blob") or f"{capture['prefix']}/{video_file}"
+            video_path = temp_path / f"{metadata.get('capture_id', index)}_{video_file}"
+            print(f"[{index}/{len(captures)}] Downloading {video_blob}")
+            download_blob_to_path(service, args.captures_container, video_blob, video_path)
             print(f"[{index}/{len(captures)}] Processing {metadata.get('drill_title', capture['prefix'])}")
             with PoseLandmarker.create_from_options(options) as landmarker:
                 summary, rows = process_video(video_path, metadata, landmarker, args.arm, args.frame_stride)
-            summary["video_blob"] = capture["video_blob"]
+            summary["video_blob"] = video_blob
             summary["metadata_blob"] = capture["metadata_blob"]
             summaries.append(summary)
             rep_rows.extend(rows)

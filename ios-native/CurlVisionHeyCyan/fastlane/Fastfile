@@ -1,0 +1,65 @@
+default_platform(:ios)
+
+platform :ios do
+  private_lane :xcode_auth_args do
+    key_file = ENV["APP_STORE_CONNECT_KEY_FILE"].to_s
+    if key_file.empty?
+      ""
+    else
+      [
+        "-allowProvisioningUpdates",
+        "-authenticationKeyPath #{key_file}",
+        "-authenticationKeyID #{ENV.fetch("APP_STORE_CONNECT_KEY_ID")}",
+        "-authenticationKeyIssuerID #{ENV.fetch("APP_STORE_CONNECT_ISSUER_ID")}"
+      ].join(" ")
+    end
+  end
+
+  desc "Generate the Xcode project with XcodeGen"
+  lane :generate_project do
+    sh("xcodegen generate")
+  end
+
+  desc "Build a signed IPA for TestFlight"
+  lane :build do
+    generate_project
+    build_app(
+      scheme: "CurlVisionHeyCyan",
+      project: "CurlVisionHeyCyan.xcodeproj",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "build",
+      output_name: "CurlVisionHeyCyan.ipa",
+      clean: true,
+      xcargs: [
+        "DEVELOPMENT_TEAM=#{ENV.fetch("DEVELOPMENT_TEAM")}",
+        "PRODUCT_BUNDLE_IDENTIFIER=#{ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER")}",
+        "MARKETING_VERSION=#{ENV.fetch("MARKETING_VERSION", "1.0.0")}",
+        "CURRENT_PROJECT_VERSION=#{ENV.fetch("CURRENT_PROJECT_VERSION", Time.now.utc.strftime("%Y%m%d%H%M"))}",
+        xcode_auth_args
+      ].join(" ")
+    )
+  end
+
+  desc "Upload the current build to TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+      key_filepath: ENV.fetch("APP_STORE_CONNECT_KEY_FILE"),
+      duration: 1200,
+      in_house: false
+    )
+
+    build
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: "build/CurlVisionHeyCyan.ipa",
+      changelog: "HeyCyan/BV100 native capture beta: BLE diagnostics, transfer download, Azure upload.",
+      skip_waiting_for_build_processing: ENV.fetch("SKIP_WAITING_FOR_BUILD_PROCESSING", "true") == "true",
+      distribute_external: false,
+      groups: ENV["TESTFLIGHT_GROUP"].to_s.empty? ? nil : [ENV["TESTFLIGHT_GROUP"]]
+    )
+  end
+end

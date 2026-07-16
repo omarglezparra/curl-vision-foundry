@@ -10,7 +10,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Curl Vision Foundry uses the front camera to capture exercise videos for your personal coach dataset.",
-        "NSPhotoLibraryUsageDescription": "Curl Vision Foundry saves workout clips so you can use them to train your personal coach.",
+        "NSPhotoLibraryUsageDescription": "Curl Vision Foundry reads HeyCyan/BV100 workout videos from Photos and saves labeled clips for your personal coach dataset.",
         "NSPhotoLibraryAddUsageDescription": "Curl Vision Foundry saves labeled exercise clips to your photo library."
       }
     },

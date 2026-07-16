@@ -1,0 +1,2 @@
+app_identifier(ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER", "com.yourname.curlvision.heycyan"))
+team_id(ENV.fetch("DEVELOPMENT_TEAM", ""))
