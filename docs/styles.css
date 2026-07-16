@@ -9,6 +9,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: #101316;
@@ -38,6 +42,15 @@ video {
   min-height: 52svh;
   object-fit: cover;
   transform: scaleX(-1);
+}
+
+#pose-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  pointer-events: none;
 }
 
 .camera-topbar,
@@ -163,6 +176,111 @@ h1 {
 
 .step.active {
   background: #2076d2;
+}
+
+.live-dashboard {
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+  margin-bottom: 16px;
+  border: 1px solid #d5dde5;
+}
+
+.live-header,
+.live-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.live-header {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.live-status {
+  min-width: 112px;
+  border-radius: 8px;
+  background: #e8edf2;
+  color: #4f5c68;
+  padding: 7px 9px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.live-status.active {
+  background: #dff4e9;
+  color: #1d6a43;
+}
+
+.live-status.warning {
+  background: #fff1d6;
+  color: #8a5a00;
+}
+
+.live-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.live-stats div {
+  border-radius: 8px;
+  background: #f3f6f8;
+  padding: 10px 8px;
+  min-width: 0;
+}
+
+.live-stats strong {
+  display: block;
+  color: #151a1f;
+  font-size: 30px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.live-stats span {
+  display: block;
+  margin-top: 5px;
+  color: #59636e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.live-progress {
+  height: 10px;
+  margin: 12px 0 10px;
+  border-radius: 8px;
+  background: #d6dde4;
+  overflow: hidden;
+}
+
+#live-progress-bar {
+  width: 0;
+  height: 100%;
+  background: #18866b;
+  transition: width 160ms ease;
+}
+
+.live-coach {
+  min-height: 42px;
+  margin: 0 0 12px;
+  color: #4f5c68;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.live-actions {
+  grid-template-columns: 1.35fr 1fr 1fr;
+}
+
+.live-actions button {
+  padding: 0 10px;
+  font-size: 14px;
+  line-height: 1.15;
 }
 
 .drill-row {
@@ -365,5 +483,13 @@ button,
 
   .profile-intro p:last-child {
     font-size: 12px;
+  }
+
+  .live-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .live-stats strong {
+    font-size: 28px;
   }
 }

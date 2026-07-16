@@ -10,9 +10,10 @@
     <main class="app-shell">
       <section class="camera-stage">
         <video id="preview" playsinline muted autoplay></video>
+        <canvas id="pose-overlay" aria-hidden="true"></canvas>
         <div class="camera-topbar">
           <div>
-            <p class="eyebrow">Good-form capture</p>
+            <p class="eyebrow">Live curl coach</p>
             <h1 id="drill-title">Curl perfecto</h1>
           </div>
           <div id="record-dot" class="record-dot" aria-label="recording status"></div>
@@ -39,6 +40,43 @@
         </section>
 
         <div id="steps" class="steps"></div>
+
+        <section class="live-dashboard" aria-label="Entrenamiento en vivo">
+          <div class="live-header">
+            <div>
+              <p class="panel-kicker">Prueba con iPhone</p>
+              <h2>Entrenar en vivo</h2>
+            </div>
+            <span id="live-status" class="live-status">pose apagada</span>
+          </div>
+
+          <div class="live-stats">
+            <div>
+              <strong id="live-reps">0</strong>
+              <span>curls</span>
+            </div>
+            <div>
+              <strong id="live-angle">--</strong>
+              <span>angulo</span>
+            </div>
+            <div>
+              <strong id="live-time">00:00</strong>
+              <span>tiempo</span>
+            </div>
+          </div>
+
+          <div class="live-progress">
+            <div id="live-progress-bar"></div>
+          </div>
+
+          <p id="live-coach" class="live-coach">Coloca el telefono frente a ti y deja visible hombro, codo y muneca.</p>
+
+          <div class="live-actions">
+            <button id="live-start" class="primary" type="button">Entrenar en vivo</button>
+            <button id="live-reset" class="secondary" type="button">Reiniciar</button>
+            <button id="switch-camera" class="secondary" type="button">Cambiar camara</button>
+          </div>
+        </section>
 
         <div class="drill-row">
           <div>
@@ -96,6 +134,6 @@
       </section>
     </main>
     <script src="./config.js"></script>
-    <script src="./app.js"></script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>

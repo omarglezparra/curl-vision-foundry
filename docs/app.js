@@ -1,3 +1,8 @@
+import {
+  FilesetResolver,
+  PoseLandmarker,
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35";
+
 const drills = [
   {
     id: "good_curl_front",
@@ -55,6 +60,7 @@ const heyCyanDrill = {
 const state = {
   selectedIndex: 0,
   stream: null,
+  facingMode: "user",
   recorder: null,
   recorderMimeType: "",
   chunks: [],
@@ -65,10 +71,24 @@ const state = {
   workoutId: loadWorkoutId(),
   clipCount: 0,
   azureUploadCount: 0,
+  poseLandmarker: null,
+  poseLoading: false,
+  poseLoadPromise: null,
+  liveActive: false,
+  liveStartedAt: 0,
+  liveTimerInterval: 0,
+  liveAnimationFrame: 0,
+  lastVideoTime: -1,
+  currentSetReps: 0,
+  totalReps: 0,
+  targetReps: 12,
+  curlPhase: "unknown",
+  selectedArm: "auto",
 };
 
 const els = {
   preview: document.getElementById("preview"),
+  overlay: document.getElementById("pose-overlay"),
   status: document.getElementById("camera-status"),
   timer: document.getElementById("timer"),
   dot: document.getElementById("record-dot"),
@@ -94,6 +114,23 @@ const els = {
   azureSas: document.getElementById("azure-sas"),
   saveAzure: document.getElementById("save-azure"),
   newSession: document.getElementById("new-session"),
+  liveStatus: document.getElementById("live-status"),
+  liveReps: document.getElementById("live-reps"),
+  liveAngle: document.getElementById("live-angle"),
+  liveTime: document.getElementById("live-time"),
+  liveProgressBar: document.getElementById("live-progress-bar"),
+  liveCoach: document.getElementById("live-coach"),
+  liveStart: document.getElementById("live-start"),
+  liveReset: document.getElementById("live-reset"),
+  switchCamera: document.getElementById("switch-camera"),
+};
+
+const poseModelUrl =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
+const poseWasmUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
+const armLandmarks = {
+  left: { shoulder: 11, elbow: 13, wrist: 15 },
+  right: { shoulder: 12, elbow: 14, wrist: 16 },
 };
 
 const apiBase = window.CURL_VISION_API_BASE || "";
@@ -175,20 +212,34 @@ function render() {
 
 async function startCamera() {
   try {
+    stopStream();
     state.stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
-        facingMode: "user",
+        facingMode: state.facingMode,
         width: { ideal: 1280 },
         height: { ideal: 720 },
       },
     });
     els.preview.srcObject = state.stream;
-    els.status.textContent = "Camara frontal lista";
+    await els.preview.play();
+    resizeOverlay();
+    els.status.textContent = state.facingMode === "user" ? "Camara frontal lista" : "Camara trasera lista";
   } catch (error) {
     els.status.textContent = "No se pudo abrir la camara";
-    alert(`No se pudo abrir la camara: ${error}`);
+    updateLiveDashboard({
+      coach: "No se pudo abrir la camara. En iPhone abre el link con HTTPS y permite acceso a la camara.",
+      status: "sin camara",
+      statusVariant: "warning",
+    });
+    console.warn("Camera failed", error);
   }
+}
+
+function stopStream() {
+  if (!state.stream) return;
+  state.stream.getTracks().forEach((track) => track.stop());
+  state.stream = null;
 }
 
 function formatTime(seconds) {
@@ -207,6 +258,336 @@ function startTimer() {
 function stopTimer() {
   window.clearInterval(state.timerInterval);
   els.timer.textContent = "00:00";
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function resizeOverlay() {
+  if (!els.overlay || !els.preview) return;
+  const rect = els.preview.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(Math.round(rect.width * dpr), 1);
+  const height = Math.max(Math.round(rect.height * dpr), 1);
+  if (els.overlay.width !== width || els.overlay.height !== height) {
+    els.overlay.width = width;
+    els.overlay.height = height;
+  }
+}
+
+function clearOverlay() {
+  if (!els.overlay) return;
+  const ctx = els.overlay.getContext("2d");
+  ctx.clearRect(0, 0, els.overlay.width, els.overlay.height);
+}
+
+function setLiveStatus(text, variant = "") {
+  els.liveStatus.textContent = text;
+  els.liveStatus.classList.toggle("active", variant === "active");
+  els.liveStatus.classList.toggle("warning", variant === "warning");
+}
+
+function updateLiveTime() {
+  if (!state.liveStartedAt) {
+    els.liveTime.textContent = "00:00";
+    return;
+  }
+  els.liveTime.textContent = formatTime((Date.now() - state.liveStartedAt) / 1000);
+}
+
+function updateLiveDashboard({ angle = null, coach = null, status = null, statusVariant = "" } = {}) {
+  els.liveReps.textContent = String(state.totalReps);
+  els.liveAngle.textContent = angle === null ? "--" : `${Math.round(angle)}°`;
+  els.liveProgressBar.style.width = `${clamp((state.currentSetReps / state.targetReps) * 100, 0, 100)}%`;
+  if (coach) els.liveCoach.textContent = coach;
+  if (status) setLiveStatus(status, statusVariant);
+  updateLiveTime();
+}
+
+async function loadPoseModel() {
+  if (state.poseLandmarker) return state.poseLandmarker;
+  if (state.poseLoadPromise) return state.poseLoadPromise;
+
+  state.poseLoading = true;
+  updateLiveDashboard({
+    coach: "Cargando detector de pose. La primera vez puede tardar unos segundos.",
+    status: "cargando",
+    statusVariant: "warning",
+  });
+
+  state.poseLoadPromise = (async () => {
+    const vision = await FilesetResolver.forVisionTasks(poseWasmUrl);
+    state.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: poseModelUrl,
+        delegate: "GPU",
+      },
+      runningMode: "VIDEO",
+      numPoses: 1,
+      minPoseDetectionConfidence: 0.5,
+      minPosePresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+    state.poseLoading = false;
+    return state.poseLandmarker;
+  })();
+
+  try {
+    return await state.poseLoadPromise;
+  } catch (error) {
+    state.poseLoading = false;
+    state.poseLoadPromise = null;
+    updateLiveDashboard({
+      coach: "No pude cargar el detector de pose. Revisa internet y vuelve a intentar.",
+      status: "sin pose",
+      statusVariant: "warning",
+    });
+    throw error;
+  }
+}
+
+async function startLiveWorkout() {
+  if (state.liveActive) {
+    stopLiveWorkout("pausado");
+    return;
+  }
+
+  if (!state.stream) {
+    await startCamera();
+  }
+  if (!state.stream) return;
+
+  await loadPoseModel();
+  state.liveActive = true;
+  state.lastVideoTime = -1;
+  state.liveStartedAt = Date.now();
+  window.clearInterval(state.liveTimerInterval);
+  state.liveTimerInterval = window.setInterval(updateLiveTime, 250);
+  els.liveStart.textContent = "Pausar";
+  updateLiveDashboard({
+    coach: "Entrenamiento activo. Ponte completo en cuadro y empieza con el brazo abajo.",
+    status: "en vivo",
+    statusVariant: "active",
+  });
+  predictPose();
+}
+
+function stopLiveWorkout(message = "pausado") {
+  state.liveActive = false;
+  window.cancelAnimationFrame(state.liveAnimationFrame);
+  window.clearInterval(state.liveTimerInterval);
+  els.liveStart.textContent = "Entrenar en vivo";
+  updateLiveDashboard({
+    coach: "Entrenamiento pausado. Toca Entrenar en vivo para continuar.",
+    status: message,
+    statusVariant: "warning",
+  });
+}
+
+function resetLiveWorkout() {
+  state.currentSetReps = 0;
+  state.totalReps = 0;
+  state.curlPhase = "unknown";
+  state.liveStartedAt = state.liveActive ? Date.now() : 0;
+  clearOverlay();
+  updateLiveDashboard({
+    angle: null,
+    coach: "Reiniciado. Empieza con el brazo extendido y visible.",
+    status: state.liveActive ? "en vivo" : "pose lista",
+    statusVariant: state.liveActive ? "active" : "",
+  });
+}
+
+async function switchCamera() {
+  const wasLive = state.liveActive;
+  if (wasLive) stopLiveWorkout("cambiando");
+  state.facingMode = state.facingMode === "user" ? "environment" : "user";
+  await startCamera();
+  if (wasLive) {
+    await startLiveWorkout();
+  }
+}
+
+function visibility(landmark) {
+  if (!landmark) return 0;
+  if (typeof landmark.visibility === "number") return landmark.visibility;
+  if (typeof landmark.presence === "number") return landmark.presence;
+  return 1;
+}
+
+function armScore(landmarks, arm) {
+  const indexes = armLandmarks[arm];
+  const points = [landmarks[indexes.shoulder], landmarks[indexes.elbow], landmarks[indexes.wrist]];
+  if (points.some((point) => !point)) return 0;
+  const visibleScore = points.reduce((sum, point) => sum + visibility(point), 0) / points.length;
+  const inFrameScore = points.every((point) => point.x > -0.15 && point.x < 1.15 && point.y > -0.15 && point.y < 1.15)
+    ? 1
+    : 0.35;
+  return visibleScore * inFrameScore;
+}
+
+function pickArm(landmarks) {
+  if (state.selectedArm !== "auto") {
+    return state.selectedArm;
+  }
+  const leftScore = armScore(landmarks, "left");
+  const rightScore = armScore(landmarks, "right");
+  return leftScore >= rightScore ? "left" : "right";
+}
+
+function elbowAngle(shoulder, elbow, wrist) {
+  const upper = { x: shoulder.x - elbow.x, y: shoulder.y - elbow.y };
+  const lower = { x: wrist.x - elbow.x, y: wrist.y - elbow.y };
+  const upperLength = Math.hypot(upper.x, upper.y);
+  const lowerLength = Math.hypot(lower.x, lower.y);
+  if (upperLength === 0 || lowerLength === 0) return null;
+  const cosine = clamp((upper.x * lower.x + upper.y * lower.y) / (upperLength * lowerLength), -1, 1);
+  return (Math.acos(cosine) * 180) / Math.PI;
+}
+
+function drawPose(landmarks, activeArm) {
+  resizeOverlay();
+  const ctx = els.overlay.getContext("2d");
+  const width = els.overlay.width;
+  const height = els.overlay.height;
+  const dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, width, height);
+
+  const segments = [
+    [11, 12],
+    [11, 13],
+    [13, 15],
+    [12, 14],
+    [14, 16],
+    [11, 23],
+    [12, 24],
+    [23, 24],
+  ];
+  segments.forEach(([from, to]) => {
+    drawSegment(ctx, landmarks[from], landmarks[to], "rgba(255,255,255,0.72)", 4 * dpr);
+  });
+
+  if (activeArm) {
+    const indexes = armLandmarks[activeArm];
+    drawSegment(ctx, landmarks[indexes.shoulder], landmarks[indexes.elbow], "#2ce6a1", 7 * dpr);
+    drawSegment(ctx, landmarks[indexes.elbow], landmarks[indexes.wrist], "#2ce6a1", 7 * dpr);
+    [indexes.shoulder, indexes.elbow, indexes.wrist].forEach((index) => {
+      drawPoint(ctx, landmarks[index], "#ffffff", 7 * dpr);
+      drawPoint(ctx, landmarks[index], "#18866b", 4 * dpr);
+    });
+  }
+}
+
+function drawSegment(ctx, start, end, color, lineWidth) {
+  if (!start || !end || visibility(start) < 0.25 || visibility(end) < 0.25) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(start.x * els.overlay.width, start.y * els.overlay.height);
+  ctx.lineTo(end.x * els.overlay.width, end.y * els.overlay.height);
+  ctx.stroke();
+}
+
+function drawPoint(ctx, point, color, radius) {
+  if (!point || visibility(point) < 0.25) return;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(point.x * els.overlay.width, point.y * els.overlay.height, radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function countCurl(angle) {
+  const downAngle = 148;
+  const upAngle = 78;
+
+  if (angle > downAngle) {
+    if (state.curlPhase === "unknown") {
+      state.curlPhase = "down";
+      return "Listo. Sube controlado hasta flexionar el codo.";
+    }
+    if (state.curlPhase === "up") {
+      state.curlPhase = "down";
+      return "Bajada completa. Siguiente rep lista.";
+    }
+    return "Brazo abajo. Sube sin balancear el torso.";
+  }
+
+  if (angle < upAngle) {
+    if (state.curlPhase === "down") {
+      state.totalReps += 1;
+      state.currentSetReps += 1;
+      state.curlPhase = "up";
+      if (state.currentSetReps >= state.targetReps) {
+        return "Serie completa. Puedes pausar o reiniciar.";
+      }
+      return `Curl ${state.totalReps} contada. Baja completo para la siguiente.`;
+    }
+    return "Arriba. Baja completo antes de contar otra.";
+  }
+
+  return state.curlPhase === "down"
+    ? "Subiendo. Mantén el codo estable."
+    : "Bajando controlado hasta extender el brazo.";
+}
+
+function handlePoseResult(result) {
+  const landmarks = result.landmarks?.[0];
+  if (!landmarks) {
+    clearOverlay();
+    updateLiveDashboard({
+      angle: null,
+      coach: "No veo tu cuerpo completo. Aleja el telefono o mejora la luz.",
+      status: "buscando",
+      statusVariant: "warning",
+    });
+    return;
+  }
+
+  const arm = pickArm(landmarks);
+  const score = armScore(landmarks, arm);
+  drawPose(landmarks, arm);
+
+  if (score < 0.45) {
+    updateLiveDashboard({
+      angle: null,
+      coach: "No veo bien hombro, codo y muneca. Ajusta distancia o angulo.",
+      status: "ajusta",
+      statusVariant: "warning",
+    });
+    return;
+  }
+
+  const indexes = armLandmarks[arm];
+  const angle = elbowAngle(landmarks[indexes.shoulder], landmarks[indexes.elbow], landmarks[indexes.wrist]);
+  if (angle === null) {
+    updateLiveDashboard({
+      angle: null,
+      coach: "No puedo calcular el angulo del codo todavia.",
+      status: "ajusta",
+      statusVariant: "warning",
+    });
+    return;
+  }
+
+  const coach = countCurl(angle);
+  updateLiveDashboard({
+    angle,
+    coach,
+    status: "en vivo",
+    statusVariant: "active",
+  });
+}
+
+function predictPose() {
+  if (!state.liveActive || !state.poseLandmarker) return;
+  if (els.preview.readyState >= 2 && els.preview.currentTime !== state.lastVideoTime) {
+    state.lastVideoTime = els.preview.currentTime;
+    const result = state.poseLandmarker.detectForVideo(els.preview, performance.now());
+    handlePoseResult(result);
+  }
+  state.liveAnimationFrame = window.requestAnimationFrame(predictPose);
 }
 
 function preferredMimeType() {
@@ -543,6 +924,22 @@ els.newSession.addEventListener("click", () => {
   render();
 });
 
+els.liveStart.addEventListener("click", () => {
+  startLiveWorkout().catch((error) => {
+    console.error("Live workout failed", error);
+    alert(`No pude iniciar entrenamiento en vivo: ${error.message || error}`);
+  });
+});
+
+els.liveReset.addEventListener("click", resetLiveWorkout);
+
+els.switchCamera.addEventListener("click", () => {
+  switchCamera().catch((error) => {
+    console.error("Camera switch failed", error);
+    alert(`No pude cambiar camara: ${error.message || error}`);
+  });
+});
+
 els.heycyanImport.addEventListener("click", () => {
   els.heycyanFile.click();
 });
@@ -556,4 +953,6 @@ els.heycyanFile.addEventListener("change", () => {
 
 els.azureSas.value = containerSasUrl();
 render();
+updateLiveDashboard();
+window.addEventListener("resize", resizeOverlay);
 startCamera();
