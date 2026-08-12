@@ -171,10 +171,17 @@ folder. Then open:
 https://omarglezparra.github.io/curl-vision-foundry/
 ```
 
-The Safari app uses the iPhone front camera and now focuses on good-form gym
-capture. Press `Nueva sesion` at the start of a workout so every clip shares
-one `session_id`, then record sets or a full-session archive. Each capture
-creates video plus metadata downloads and uploads to Azure when configured:
+The Safari app uses the iPhone camera for live curl testing and good-form gym
+capture. Open the link on iPhone, allow camera access, then tap
+`Entrenar en vivo`. The page loads MediaPipe Pose in the browser, draws the
+tracked body landmarks, calculates elbow angle, and counts curls with a simple
+down/up/down rule. Use `Cambiar camara` if you want to aim the rear camera at a
+mirror.
+
+For dataset capture, press `Nueva sesion` at the start of a workout so every
+clip shares one `session_id`, then record sets or a full-session archive. Each
+capture creates video plus metadata downloads and uploads to Azure when
+configured:
 
 - Curl limpio - frente
 - Curl limpio - 45 grados
@@ -234,6 +241,34 @@ BV100 BLE command bytes because those commands are proprietary.
 
 TestFlight automation is prepared with Fastlane and GitHub Actions in
 `ios-native/CurlVisionHeyCyan`. See `TESTFLIGHT.md` in that folder.
+
+### Native HeyCyan Android App
+
+The native Android app lives in `android-native/CurlVisionHeyCyan`. It now opens
+as a simple gym flow: connect the Blackview/HeyCyan glasses, start the workout,
+import the glasses video, and upload it to the model. Advanced BLE command,
+WiFi transfer, and diagnostic tools stay hidden behind `Opciones avanzadas`.
+
+```powershell
+cd android-native/CurlVisionHeyCyan
+gradle :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n com.curlvision.heycyan/.MainActivity
+```
+
+Use the emulator for UI preview only. Real BV100/HeyCyan BLE and glasses WiFi
+testing require a physical Android phone because Android Emulator does not
+expose the PC Bluetooth radio as the phone's BLE hardware.
+
+For emulator testing with glasses paired to Windows, run the PC Bluetooth bridge
+and use `Conectar usando la PC` in the Android app:
+
+```powershell
+.\.venv\Scripts\python.exe .\src\windows_bv100_bridge.py
+```
+
+The bridge exposes Windows BLE status at `http://127.0.0.1:8765`; Android
+Emulator reaches that same host as `http://10.0.2.2:8765`.
 
 ## Azure Capture Pipeline
 
