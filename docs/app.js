@@ -81,6 +81,8 @@ const state = {
   briefingMinimumUntil: 0,
   countdownTimer: 0,
   voicePhase: "idle",
+  trackingStarted: false,
+  autoRecordAfterCountdown: true,
 };
 
 const els = {
@@ -322,7 +324,9 @@ function render() {
       : "Grabar set";
   els.record.classList.toggle("stop", state.recording);
   els.dot.classList.toggle("active", state.recording);
-  els.record.disabled = state.workoutCompleted || (state.completedSets >= WORKOUT_SETS && state.currentSetReps >= REPS_PER_SET && !state.recording);
+  els.record.disabled = state.workoutCompleted
+    || (state.liveActive && !state.countingEnabled)
+    || (state.completedSets >= WORKOUT_SETS && state.currentSetReps >= REPS_PER_SET && !state.recording);
   els.newSession.disabled = state.recording || state.liveActive;
   els.cameraStart.hidden = Boolean(state.stream);
   els.switchCamera.disabled = !state.stream || state.recording;
@@ -565,6 +569,14 @@ function startCountdown() {
       state.briefingUntil = 0;
       els.liveCoach.textContent = "Ahora sí. Empieza con el brazo extendido.";
       setLiveStatus("en vivo", "active");
+      startTrackingAfterCountdown().catch((error) => {
+        console.error("Tracking start failed", error);
+        updateLiveDashboard({
+          coach: "No pude iniciar el seguimiento. Pulsa Continuar entrenamiento.",
+          status: "error",
+          statusVariant: "warning",
+        });
+      });
       return;
     }
     const phrase = count === 3 ? "Tres. Ahora empieza." : String(count);
@@ -654,10 +666,7 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
   }
 
   const wasAlreadyStarted = Boolean(state.workoutStartedAt);
-  if (!state.sessionIntroSpoken) {
-    // Safari/iOS only reliably allows speech when it starts inside the button gesture.
-    announceSessionBriefing();
-  }
+  state.autoRecordAfterCountdown = autoRecord;
 
   if (!state.stream) {
     await startCamera();
@@ -674,20 +683,30 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
   state.liveTimerInterval = window.setInterval(updateLiveTime, 250);
   els.liveStart.textContent = "Pausar";
   updateLiveDashboard({
-    status: "en vivo",
-    statusVariant: "active",
+    coach: "Cámara e IA listas. Escucha tu rutina antes de comenzar.",
+    status: "preparando",
+    statusVariant: "warning",
   });
-  if (wasAlreadyStarted && state.sessionIntroSpoken) {
+  if (!state.sessionIntroSpoken) {
+    announceSessionBriefing();
+  } else if (wasAlreadyStarted) {
     announceSessionBriefing({ continuation: true });
   }
+}
+
+async function startTrackingAfterCountdown() {
+  if (!state.liveActive || !state.countingEnabled || !state.poseLandmarker || state.trackingStarted) return;
+  state.trackingStarted = true;
+  state.lastVideoTime = -1;
   predictPose();
-  if (autoRecord && !state.recording) {
+  if (state.autoRecordAfterCountdown && !state.recording) {
     await startRecording();
   }
 }
 
 function stopLiveWorkout(message = "pausado") {
   state.liveActive = false;
+  state.trackingStarted = false;
   state.countingEnabled = false;
   state.countdownActive = false;
   state.briefingFinished = false;
@@ -731,6 +750,7 @@ function recordCompletedSet() {
 
 function resetLiveWorkout() {
   state.currentSetReps = 0;
+  state.trackingStarted = false;
   state.countingEnabled = false;
   state.countdownActive = false;
   state.briefingFinished = false;
@@ -1219,6 +1239,11 @@ function videoDuration(file) {
 
 async function startRecording() {
   if (state.recording) return;
+  if (!state.liveActive || !state.countingEnabled) {
+    state.autoRecordAfterCountdown = true;
+    if (!state.liveActive) await startLiveWorkout({ autoRecord: true });
+    return;
+  }
   state.currentSetReps = 0;
   state.setRecorded = false;
   state.setStartedAt = Date.now();
@@ -1227,9 +1252,6 @@ async function startRecording() {
   state.lastSpokenRep = 0;
   state.curlPhase = "unknown";
   state.torsoAnchorX = null;
-  if (!state.liveActive) {
-    await startLiveWorkout({ autoRecord: false });
-  }
   if (!state.stream) {
     await startCamera();
   }
@@ -1501,9 +1523,6 @@ els.newSession.addEventListener("click", () => {
 });
 
 els.liveStart.addEventListener("click", () => {
-  if (!state.liveActive && !state.workoutCompleted && !state.sessionIntroSpoken) {
-    announceSessionBriefing();
-  }
   startLiveWorkout().catch((error) => {
     console.error("Live workout failed", error);
     alert(`No pude iniciar entrenamiento en vivo: ${error.message || error}`);
