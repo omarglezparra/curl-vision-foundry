@@ -57,6 +57,7 @@ const state = {
   lastMotivationAt: 0,
   lastSpokenCue: "",
   lastCueAt: 0,
+  briefingUntil: 0,
   torsoAnchorX: null,
   completedSets: 0,
   setRecorded: false,
@@ -72,6 +73,7 @@ const state = {
   setHistory: [],
   workoutHistory: loadWorkoutHistory(),
   completionScheduled: false,
+  sessionIntroSpoken: false,
 };
 
 const els = {
@@ -478,6 +480,35 @@ function speak(text, { force = false } = {}) {
   const voice = spanishVoice();
   if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
+  return utterance;
+}
+
+function capitalized(value) {
+  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
+}
+
+function sessionDateLabel() {
+  try {
+    return new Intl.DateTimeFormat("es-MX", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).format(new Date());
+  } catch (error) {
+    return "hoy";
+  }
+}
+
+function announceSessionBriefing({ continuation = false } = {}) {
+  const dateLabel = sessionDateLabel();
+  const visiblePlan = continuation
+    ? "Continuamos con tu sesión de curl. Te quedan las repeticiones necesarias para completar el objetivo."
+    : `Hola Omar. Hoy es ${dateLabel}. Hoy te toca entrenar el bíceps. Empezamos con curl estricto: una sesión de ${REPS_PER_SET} repeticiones. Mantén el codo estable, el torso quieto y controla la bajada. Yo te iré guiando durante toda la sesión, contando cada repetición y avisándote de tu técnica. Al terminar te felicitaré y te mostraré tus estadísticas.`;
+  els.liveCoach.textContent = visiblePlan;
+  setLiveStatus(continuation ? "continuamos" : "briefing", "active");
+  state.briefingUntil = Date.now() + (continuation ? 3500 : 9000);
+  speak(visiblePlan);
+  state.sessionIntroSpoken = true;
 }
 
 function announceRep() {
@@ -488,7 +519,7 @@ function announceRep() {
     speak(`Llevas ${state.currentSetReps} repeticiones. Sesión completada.`);
     return;
   }
-  speak(`Llevas ${state.currentSetReps}. Te faltan ${remaining} para el fallo estimado.`);
+  speak(`Llevas ${state.currentSetReps}. Te faltan ${remaining}. Mantén la técnica.`);
 }
 
 function motivate() {
@@ -502,6 +533,7 @@ function motivate() {
 
 function speakFormCue(message) {
   const now = Date.now();
+  if (now < state.briefingUntil) return;
   if (now - state.lastCueAt < 8000 || message === state.lastSpokenCue) return;
   state.lastCueAt = now;
   state.lastSpokenCue = message;
@@ -576,7 +608,7 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
     status: "en vivo",
     statusVariant: "active",
   });
-  speak("Javier activado. Te diré cuántas repeticiones llevas. Al completar ocho abriré tu dashboard.");
+  announceSessionBriefing({ continuation: state.sessionIntroSpoken });
   predictPose();
   if (autoRecord && !state.recording) {
     await startRecording();
@@ -610,7 +642,7 @@ function recordCompletedSet() {
   });
   const isWorkoutReady = state.completedSets >= WORKOUT_SETS;
   speak(isWorkoutReady
-    ? "Cuarto set completo. Ya puedes finalizar y revisar tu dashboard."
+    ? "Octava repetición completa. Excelente, Omar. Estoy preparando tu dashboard."
     : `Set ${state.completedSets} completo. Descansa y reinicia el set cuando estés listo.`);
   updateLiveDashboard({
     coach: isWorkoutReady
@@ -630,6 +662,7 @@ function resetLiveWorkout() {
   state.lastMotivationAt = 0;
   state.lastSpokenCue = "";
   state.lastCueAt = 0;
+  state.briefingUntil = 0;
   state.torsoAnchorX = null;
   state.setStartedAt = state.liveActive ? Date.now() : 0;
   state.setAngles = [];
@@ -766,9 +799,9 @@ function finishWorkout() {
     speak(`Aún no puedes finalizar. Completa los ${WORKOUT_SETS} sets de ${REPS_PER_SET}.`);
     return;
   }
+  state.workoutCompleted = true;
   if (state.recording) stopRecording();
   const summary = workoutSummary();
-  state.workoutCompleted = true;
   state.workoutHistory = [summary, ...state.workoutHistory.filter((item) => item.id !== summary.id)];
   persistHistory();
   stopLiveWorkout("completado");
@@ -792,7 +825,7 @@ function finishWorkout() {
       renderSaveLog("pending", "Se conserva localmente y se podrá sincronizar al recuperar conexión");
       els.status.textContent = "Dashboard listo; no se pudo guardar en Azure";
     });
-  speak("Entrenamiento completado. Tu dashboard y la rutina de brazo siguiente están listos.");
+  speak("Excelente trabajo, Omar. Has completado tu sesión de curl. Respira, hidrátate y descansa. Tu dashboard y la siguiente rutina ya están listos.");
 }
 
 async function switchCamera() {
@@ -1012,6 +1045,8 @@ function handlePoseResult(result) {
     motivate();
   } else if (warning) {
     speakFormCue(warning);
+  } else if (state.currentSetReps === 0) {
+    speakFormCue(coachFromAngle);
   }
   updateLiveDashboard({
     angle,
@@ -1181,7 +1216,9 @@ function makeDownloads() {
   els.status.textContent = apiBase || containerSasUrl()
     ? "Clip listo; subiendo a Azure..."
     : "Clip listo; descarga el video para guardarlo en tu iPhone";
-  speak(`Sesión guardada. Llevas ${state.currentSetReps} repeticiones en este set.`);
+  if (!state.workoutCompleted) {
+    speak(`Sesión guardada. Llevas ${state.currentSetReps} repeticiones en este set.`);
+  }
   render();
   uploadToAzure(videoBlob, metadataBlob, metadata).catch((error) => {
     console.error("Azure upload failed", error);
@@ -1362,6 +1399,7 @@ els.newSession.addEventListener("click", () => {
   state.angleSamples = [];
   state.setHistory = [];
   state.completionScheduled = false;
+  state.sessionIntroSpoken = false;
   els.resultsDashboard.hidden = true;
   resetLiveWorkout();
   els.downloads.hidden = true;
