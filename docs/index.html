@@ -3,134 +3,122 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Curl Vision Foundry Capture</title>
+    <meta name="theme-color" content="#050607" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>Javier AI Coach</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <section class="camera-stage">
+    <main class="camera-app">
+      <section class="camera-stage" aria-label="Cámara y entrenamiento en vivo">
         <video id="preview" playsinline muted autoplay></video>
         <canvas id="pose-overlay" aria-hidden="true"></canvas>
-        <div class="camera-topbar">
+
+        <header class="camera-topbar">
           <div>
-            <p class="eyebrow">Live curl coach</p>
-            <h1 id="drill-title">Curl perfecto</h1>
+            <p class="brand">JAVIER AI</p>
+            <h1 id="drill-title">Curl estricto</h1>
           </div>
-          <div id="record-dot" class="record-dot" aria-label="recording status"></div>
+          <div class="top-stats">
+            <div class="rep-counter"><strong id="live-reps">0</strong><span>reps</span></div>
+            <div id="workout-progress" class="workout-progress">Sesión · 0/8</div>
+            <div id="record-dot" class="record-dot" aria-label="estado de grabación"></div>
+          </div>
+        </header>
+
+        <div class="coach-chip">
+          <span id="live-status" class="live-status">IA apagada</span>
+          <p id="live-coach">Activa la cámara y ponte de cuerpo completo frente al iPhone.</p>
         </div>
+
         <div class="camera-footer">
-          <span id="camera-status">Camara frontal lista</span>
-          <span id="timer">00:00</span>
-        </div>
-      </section>
-
-      <section class="control-panel">
-        <section class="profile-intro" aria-label="Omar profile">
-          <div class="portrait-wrap">
-            <img src="./assets/omar.jpg" alt="Professional portrait of Omar" />
+          <div class="camera-readout">
+            <span id="camera-status">Cámara lista</span>
+            <span id="timer">00:00</span>
           </div>
-          <div>
-            <p class="profile-kicker">Curl Vision Foundry</p>
-            <h2>Omar Gonzalez</h2>
-            <p>
-              Building a personal AI coach that learns clean training form, effort, fatigue,
-              and failure risk from real gym captures.
-            </p>
+          <div class="live-readout" aria-label="métricas en vivo">
+            <span><strong id="live-angle">--</strong>° ángulo</span>
+            <span><strong id="live-time">00:00</strong> tiempo</span>
           </div>
-        </section>
-
-        <div id="steps" class="steps"></div>
-
-        <section class="live-dashboard" aria-label="Entrenamiento en vivo">
-          <div class="live-header">
-            <div>
-              <p class="panel-kicker">Prueba con iPhone</p>
-              <h2>Entrenar en vivo</h2>
-            </div>
-            <span id="live-status" class="live-status">pose apagada</span>
-          </div>
-
-          <div class="live-stats">
-            <div>
-              <strong id="live-reps">0</strong>
-              <span>curls</span>
-            </div>
-            <div>
-              <strong id="live-angle">--</strong>
-              <span>angulo</span>
-            </div>
-            <div>
-              <strong id="live-time">00:00</strong>
-              <span>tiempo</span>
-            </div>
-          </div>
-
-          <div class="live-progress">
-            <div id="live-progress-bar"></div>
-          </div>
-
-          <p id="live-coach" class="live-coach">Coloca el telefono frente a ti y deja visible hombro, codo y muneca.</p>
-
-          <div class="live-actions">
-            <button id="live-start" class="primary" type="button">Entrenar en vivo</button>
-            <button id="live-reset" class="secondary" type="button">Reiniciar</button>
-            <button id="switch-camera" class="secondary" type="button">Cambiar camara</button>
-          </div>
-        </section>
-
-        <div class="drill-row">
-          <div>
-            <h2 id="panel-title">Curl perfecto</h2>
-            <p id="target">10-12 reps limpias</p>
-          </div>
-          <strong id="counter">1/5</strong>
         </div>
 
-        <div id="cues" class="cues"></div>
-
-        <div class="metadata">
-          <p><span>session_id</span><strong id="session-id"></strong></p>
-          <p><span>label</span><strong id="label"></strong></p>
-          <p><span>clips</span><strong id="clip-count">0</strong></p>
-          <p><span>cloud</span><strong id="cloud-status">local</strong></p>
+        <div class="workflow-steps" aria-label="Progreso del entrenamiento">
+          <span id="step-start" class="workflow-step active">1 · Empezar</span>
+          <span id="step-complete" class="workflow-step">2 · Completar 8 reps</span>
         </div>
 
-        <div class="actions">
-          <button id="previous" class="secondary" type="button">Anterior</button>
-          <button id="record" class="primary" type="button">Grabar set</button>
-          <button id="next" class="secondary" type="button">Siguiente</button>
+        <div class="camera-controls" aria-label="Controles de Javier AI">
+          <button id="camera-start" class="control-button control-primary" type="button">Activar cámara</button>
+          <button id="live-start" class="control-button control-primary" type="button">Empezar entrenamiento</button>
+          <button id="record" class="control-button control-record" type="button">Grabar set</button>
+          <button id="voice-toggle" class="control-button" type="button">Voz ON</button>
+          <button id="switch-camera" class="control-button" type="button">Cambiar cámara</button>
+          <button id="new-session" class="control-button" type="button">Nueva sesión</button>
+          <button id="live-reset" class="control-button control-small" type="button">Reiniciar set</button>
+          <button id="finish-workout" class="control-button control-finish control-small" type="button" disabled>Finalizar entrenamiento</button>
         </div>
-
-        <button id="new-session" class="session-button secondary" type="button">Nueva sesion</button>
-
-        <section class="heycyan-panel">
-          <div>
-            <p class="panel-kicker">HeyCyan / BV100</p>
-            <h3>Importar video de lentes</h3>
-            <p>
-              Guarda el clip de HeyCyan en Fotos y seleccionalo aqui para subirlo al dataset.
-            </p>
-          </div>
-          <input id="heycyan-file" type="file" accept="video/*" hidden />
-          <button id="heycyan-import" class="primary" type="button">Importar HeyCyan</button>
-          <span id="heycyan-status">Esperando video</span>
-        </section>
 
         <div id="downloads" class="downloads" hidden>
+          <p>Sesión lista. Descarga el video para guardarlo en tu iPhone.</p>
           <a id="video-download" download>Descargar video</a>
           <a id="metadata-download" download>Descargar metadata</a>
         </div>
+      </section>
 
-        <div class="cloud-panel">
-          <label for="azure-sas">Azure Blob SAS</label>
-          <textarea id="azure-sas" rows="3" spellcheck="false"></textarea>
-          <button id="save-azure" class="secondary" type="button">Guardar Azure</button>
+      <section id="results-dashboard" class="results-dashboard" hidden aria-live="polite">
+        <div class="dashboard-header">
+          <div>
+            <p class="brand">JAVIER AI · RESUMEN</p>
+            <h2>Entrenamiento completado</h2>
+            <p id="dashboard-subtitle">Tu siguiente rutina de brazo ya está preparada.</p>
+          </div>
+          <div class="dashboard-actions">
+            <span id="dashboard-sync-status" class="status-pill">Guardando en Azure…</span>
+            <button id="dashboard-close" class="dashboard-close" type="button" aria-label="Cerrar dashboard">×</button>
+          </div>
         </div>
+        <div id="dashboard-metrics" class="dashboard-metrics"></div>
+        <div class="dashboard-columns">
+          <div class="dashboard-card">
+            <div class="card-heading"><h3>Detalle de la sesión</h3><span id="dashboard-session-status" class="status-pill">8/8 reps</span></div>
+            <div id="dashboard-set-list" class="set-list"></div>
+          </div>
+          <div class="dashboard-card">
+            <div class="card-heading"><h3>Próxima rutina · brazos</h3><span class="status-pill ready">Cargada</span></div>
+            <div id="next-routine" class="routine-list"></div>
+          </div>
+        </div>
+        <div class="dashboard-card dashboard-history-card">
+          <div class="card-heading"><h3>Historial reciente</h3><span id="dashboard-history-count" class="muted-label"></span></div>
+          <div id="dashboard-history" class="history-list"></div>
+        </div>
+        <div class="dashboard-card recovery-card">
+          <div class="card-heading"><h3>Recuperación para mañana</h3><span class="status-pill ready">Plan listo</span></div>
+          <div id="recovery-plan" class="recovery-plan"></div>
+        </div>
+        <button id="dashboard-new-session" class="control-button control-primary dashboard-new-session" type="button">Preparar siguiente sesión</button>
+      </section>
 
-        <p class="note">
-          Usa Safari en iPhone con HTTPS. Graba sets buenos bajo la misma sesion; la app sube a
-          Azure si hay SAS y mantiene descargas locales como respaldo.
-        </p>
+      <!-- Elements kept for the existing capture/upload contract; they are not shown in camera mode. -->
+      <section class="compatibility" hidden aria-hidden="true">
+        <div id="steps"></div>
+        <div id="live-progress-bar"></div>
+        <h2 id="panel-title">Curl estricto</h2>
+        <p id="target">Fallo estimado: 12 repeticiones</p>
+        <strong id="counter">1/1</strong>
+        <div id="cues"></div>
+        <strong id="session-id"></strong>
+        <strong id="label"></strong>
+        <strong id="clip-count">0</strong>
+        <strong id="cloud-status">local</strong>
+        <button id="previous" type="button">Anterior</button>
+        <button id="next" type="button">Siguiente</button>
+        <div class="cloud-panel">
+          <textarea id="azure-sas"></textarea>
+          <button id="save-azure" type="button">Guardar Azure</button>
+        </div>
       </section>
     </main>
     <script src="./config.js"></script>

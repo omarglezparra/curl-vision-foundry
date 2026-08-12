@@ -10,52 +10,26 @@ const drills = [
     label: "good_form",
     angle: "front",
     captureType: "set",
-    title: "Curl limpio - frente",
-    target: "1 serie completa con tecnica buena",
-    cues: ["Camara al frente", "Torso quieto", "Hombro estable", "Rango completo"],
-  },
-  {
-    id: "good_curl_45",
-    exercise: "biceps_curl",
-    label: "good_form",
-    angle: "45_degrees",
-    captureType: "set",
-    title: "Curl limpio - 45 grados",
-    target: "1 serie completa con tecnica buena",
-    cues: ["Camara a 45 grados", "Codo visible", "Muneca visible", "Tempo controlado"],
-  },
-  {
-    id: "good_curl_side",
-    exercise: "biceps_curl",
-    label: "good_form",
-    angle: "side",
-    captureType: "set",
-    title: "Curl limpio - lateral",
-    target: "1 serie completa con tecnica buena",
-    cues: ["Camara lateral", "Brazo completo visible", "Rango completo", "Sin balanceo"],
-  },
-  {
-    id: "good_workout_full",
-    exercise: "full_workout",
-    label: "good_form",
-    angle: "mixed",
-    captureType: "full_session",
-    title: "Sesion gym completa",
-    target: "Graba tu entrenamiento limpio completo",
-    cues: ["Solo reps buenas", "Cambia angulo si hace falta", "Mantente visible", "Pausa si hay dolor"],
+    title: "Curl estricto",
+    target: "Objetivo: 1 sesión de 8 repeticiones",
+    cues: ["Codo estable", "Torso quieto", "Rango completo", "Bajada controlada"],
   },
 ];
 
-const heyCyanDrill = {
-  id: "heycyan_bv100_mirror_import",
-  exercise: "biceps_curl",
-  label: "good_form",
-  angle: "mirror_bv100",
-  captureType: "set",
-  title: "HeyCyan BV100",
-  target: "Video importado desde Fotos",
-  cues: ["HeyCyan", "Espejo", "Brazo completo visible", "Auto dataset"],
-};
+const WORKOUT_SETS = 1;
+const REPS_PER_SET = 8;
+const WORKOUT_HISTORY_KEY = "curlVisionWorkoutHistory";
+const nextArmRoutine = [
+  { name: "Curl estricto", detail: "4 sets · 8 reps · 75 s descanso", cue: "Codo estable" },
+  { name: "Curl martillo", detail: "3 sets · 10 reps · 60 s descanso", cue: "Muñeca neutra" },
+  { name: "Curl inclinado", detail: "3 sets · 8 reps · 75 s descanso", cue: "Bajada de 3 s" },
+  { name: "Extensión de tríceps", detail: "3 sets · 10 reps · 60 s descanso", cue: "Hombros abajo" },
+];
+const recoveryPlan = [
+  { title: "Descanso", text: "Deja 24–48 h antes de volver a entrenar bíceps. Entre ejercicios: 60–90 s." },
+  { title: "Comida", text: "Incluye proteína, carbohidrato, fruta o verdura y agua: huevos, pollo, yogur, arroz, avena o legumbres." },
+  { title: "Mañana", text: "Haz movilidad suave de hombros y entrena solo si no hay dolor agudo, mareo o fatiga anormal." },
+];
 
 const state = {
   selectedIndex: 0,
@@ -81,9 +55,29 @@ const state = {
   lastVideoTime: -1,
   currentSetReps: 0,
   totalReps: 0,
-  targetReps: 12,
+  targetReps: REPS_PER_SET,
   curlPhase: "unknown",
   selectedArm: "auto",
+  voiceEnabled: true,
+  lastSpokenRep: 0,
+  lastMotivationAt: 0,
+  lastSpokenCue: "",
+  lastCueAt: 0,
+  torsoAnchorX: null,
+  completedSets: 0,
+  setRecorded: false,
+  workoutStartedAt: 0,
+  workoutCompleted: false,
+  setStartedAt: 0,
+  setAngles: [],
+  setWarnings: 0,
+  formWarnings: 0,
+  goodReps: 0,
+  lastFormWarning: "",
+  angleSamples: [],
+  setHistory: [],
+  workoutHistory: loadWorkoutHistory(),
+  completionScheduled: false,
 };
 
 const els = {
@@ -108,12 +102,10 @@ const els = {
   downloads: document.getElementById("downloads"),
   videoDownload: document.getElementById("video-download"),
   metadataDownload: document.getElementById("metadata-download"),
-  heycyanFile: document.getElementById("heycyan-file"),
-  heycyanImport: document.getElementById("heycyan-import"),
-  heycyanStatus: document.getElementById("heycyan-status"),
   azureSas: document.getElementById("azure-sas"),
   saveAzure: document.getElementById("save-azure"),
   newSession: document.getElementById("new-session"),
+  cameraStart: document.getElementById("camera-start"),
   liveStatus: document.getElementById("live-status"),
   liveReps: document.getElementById("live-reps"),
   liveAngle: document.getElementById("live-angle"),
@@ -123,6 +115,23 @@ const els = {
   liveStart: document.getElementById("live-start"),
   liveReset: document.getElementById("live-reset"),
   switchCamera: document.getElementById("switch-camera"),
+  voiceToggle: document.getElementById("voice-toggle"),
+  workoutProgress: document.getElementById("workout-progress"),
+  stepStart: document.getElementById("step-start"),
+  stepComplete: document.getElementById("step-complete"),
+  finishWorkout: document.getElementById("finish-workout"),
+  resultsDashboard: document.getElementById("results-dashboard"),
+  dashboardClose: document.getElementById("dashboard-close"),
+  dashboardMetrics: document.getElementById("dashboard-metrics"),
+  dashboardSubtitle: document.getElementById("dashboard-subtitle"),
+  dashboardSessionStatus: document.getElementById("dashboard-session-status"),
+  dashboardSetList: document.getElementById("dashboard-set-list"),
+  nextRoutine: document.getElementById("next-routine"),
+  dashboardHistory: document.getElementById("dashboard-history"),
+  dashboardHistoryCount: document.getElementById("dashboard-history-count"),
+  dashboardNewSession: document.getElementById("dashboard-new-session"),
+  dashboardSyncStatus: document.getElementById("dashboard-sync-status"),
+  recoveryPlan: document.getElementById("recovery-plan"),
 };
 
 const poseModelUrl =
@@ -133,7 +142,7 @@ const armLandmarks = {
   right: { shoulder: 12, elbow: 14, wrist: 16 },
 };
 
-const apiBase = window.CURL_VISION_API_BASE || "";
+const apiBase = (window.CURL_VISION_API_BASE || "").trim().replace(/\/$/, "");
 const configContainerSasUrl = window.CURL_VISION_CONTAINER_SAS_URL || "";
 
 function containerSasUrl() {
@@ -168,6 +177,56 @@ function sessionId() {
   return state.workoutId || `gym_good_${todayStamp()}`;
 }
 
+function loadWorkoutHistory() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(WORKOUT_HISTORY_KEY) || "[]");
+    return Array.isArray(stored) ? stored : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function canFinishWorkout() {
+  return state.completedSets >= WORKOUT_SETS && state.currentSetReps >= REPS_PER_SET;
+}
+
+function currentSetNumber() {
+  return Math.min(state.completedSets + 1, WORKOUT_SETS);
+}
+
+function average(values) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function formScore() {
+  const totalReps = Math.max(state.totalReps, 1);
+  return Math.round(clamp(100 - (state.formWarnings / totalReps) * 100, 0, 100));
+}
+
+function formatDate(value) {
+  try {
+    return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(new Date(value));
+  } catch (error) {
+    return "Hoy";
+  }
+}
+
+function persistHistory() {
+  state.workoutHistory = state.workoutHistory.slice(0, 7);
+  localStorage.setItem(WORKOUT_HISTORY_KEY, JSON.stringify(state.workoutHistory));
+}
+
+function setProgressText() {
+  const setNumber = state.workoutCompleted
+    ? WORKOUT_SETS
+    : Math.min(state.currentSetReps >= REPS_PER_SET ? Math.max(state.completedSets, 1) : currentSetNumber(), WORKOUT_SETS);
+  els.workoutProgress.textContent = `Sesión · ${state.currentSetReps}/${REPS_PER_SET}`;
+  els.stepStart.classList.toggle("active", !state.workoutStartedAt && !state.workoutCompleted);
+  els.stepStart.classList.toggle("done", Boolean(state.workoutStartedAt));
+  els.stepComplete.classList.toggle("active", Boolean(state.workoutStartedAt) && !state.workoutCompleted);
+  els.stepComplete.classList.toggle("done", state.workoutCompleted);
+}
+
 function render() {
   const drill = activeDrill();
   els.drillTitle.textContent = drill.title;
@@ -185,7 +244,21 @@ function render() {
       : "Grabar set";
   els.record.classList.toggle("stop", state.recording);
   els.dot.classList.toggle("active", state.recording);
-  els.newSession.disabled = state.recording;
+  els.record.disabled = state.workoutCompleted || (state.completedSets >= WORKOUT_SETS && state.currentSetReps >= REPS_PER_SET && !state.recording);
+  els.newSession.disabled = state.recording || state.liveActive;
+  els.cameraStart.hidden = Boolean(state.stream);
+  els.switchCamera.disabled = !state.stream || state.recording;
+  els.liveReset.disabled = state.recording || state.workoutCompleted || state.completedSets >= WORKOUT_SETS;
+  els.finishWorkout.disabled = !canFinishWorkout() || state.recording || state.workoutCompleted;
+  els.finishWorkout.textContent = state.workoutCompleted ? "Entrenamiento finalizado" : "Finalizar entrenamiento";
+  setProgressText();
+  if ("speechSynthesis" in window) {
+    els.voiceToggle.textContent = state.voiceEnabled ? "Voz ON" : "Voz OFF";
+    els.voiceToggle.disabled = false;
+  } else {
+    els.voiceToggle.textContent = "Voz no disponible";
+    els.voiceToggle.disabled = true;
+  }
 
   els.steps.innerHTML = "";
   drills.forEach((_, index) => {
@@ -211,6 +284,16 @@ function render() {
 }
 
 async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    els.status.textContent = "Cámara no compatible";
+    updateLiveDashboard({
+      coach: "Abre Javier AI en Safari con HTTPS para usar la cámara del iPhone.",
+      status: "sin cámara",
+      statusVariant: "warning",
+    });
+    return;
+  }
+
   try {
     stopStream();
     state.stream = await navigator.mediaDevices.getUserMedia({
@@ -225,13 +308,15 @@ async function startCamera() {
     await els.preview.play();
     resizeOverlay();
     els.status.textContent = state.facingMode === "user" ? "Camara frontal lista" : "Camara trasera lista";
+    render();
   } catch (error) {
     els.status.textContent = "No se pudo abrir la camara";
     updateLiveDashboard({
-      coach: "No se pudo abrir la camara. En iPhone abre el link con HTTPS y permite acceso a la camara.",
+      coach: "No se pudo abrir la cámara. En iPhone abre el enlace con HTTPS y permite el acceso a la cámara.",
       status: "sin camara",
       statusVariant: "warning",
     });
+    render();
     console.warn("Camera failed", error);
   }
 }
@@ -299,10 +384,59 @@ function updateLiveTime() {
 function updateLiveDashboard({ angle = null, coach = null, status = null, statusVariant = "" } = {}) {
   els.liveReps.textContent = String(state.totalReps);
   els.liveAngle.textContent = angle === null ? "--" : `${Math.round(angle)}°`;
-  els.liveProgressBar.style.width = `${clamp((state.currentSetReps / state.targetReps) * 100, 0, 100)}%`;
+  els.liveProgressBar.style.width = `${clamp(((state.completedSets * REPS_PER_SET + state.currentSetReps) / (WORKOUT_SETS * REPS_PER_SET)) * 100, 0, 100)}%`;
+  setProgressText();
   if (coach) els.liveCoach.textContent = coach;
   if (status) setLiveStatus(status, statusVariant);
   updateLiveTime();
+}
+
+function spanishVoice() {
+  if (!("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find((voice) => voice.lang.toLowerCase() === "es-mx")
+    || voices.find((voice) => voice.lang.toLowerCase().startsWith("es"))
+    || null;
+}
+
+function speak(text, { force = false } = {}) {
+  if ((!state.voiceEnabled && !force) || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "es-MX";
+  utterance.rate = 1.04;
+  utterance.pitch = 1.02;
+  const voice = spanishVoice();
+  if (voice) utterance.voice = voice;
+  window.speechSynthesis.speak(utterance);
+}
+
+function announceRep() {
+  if (state.currentSetReps <= state.lastSpokenRep) return;
+  state.lastSpokenRep = state.currentSetReps;
+  const remaining = Math.max(state.targetReps - state.currentSetReps, 0);
+  if (remaining === 0) {
+    speak(`Llevas ${state.currentSetReps} repeticiones. Sesión completada.`);
+    return;
+  }
+  speak(`Llevas ${state.currentSetReps}. Te faltan ${remaining} para el fallo estimado.`);
+}
+
+function motivate() {
+  const now = Date.now();
+  if (state.currentSetReps === 0 || now - state.lastMotivationAt < 22000) return;
+  state.lastMotivationAt = now;
+  speak(state.currentSetReps >= state.targetReps - 2
+    ? "Muy bien. Las últimas cuentan; aprieta y controla la bajada."
+    : "Buen ritmo. Mantén el torso quieto y sigue fuerte.");
+}
+
+function speakFormCue(message) {
+  const now = Date.now();
+  if (now - state.lastCueAt < 8000 || message === state.lastSpokenCue) return;
+  state.lastCueAt = now;
+  state.lastSpokenCue = message;
+  speak(message);
 }
 
 async function loadPoseModel() {
@@ -347,7 +481,8 @@ async function loadPoseModel() {
   }
 }
 
-async function startLiveWorkout() {
+async function startLiveWorkout({ autoRecord = true } = {}) {
+  if (state.workoutCompleted) return;
   if (state.liveActive) {
     stopLiveWorkout("pausado");
     return;
@@ -360,6 +495,8 @@ async function startLiveWorkout() {
 
   await loadPoseModel();
   state.liveActive = true;
+  if (!state.workoutStartedAt) state.workoutStartedAt = Date.now();
+  if (!state.setStartedAt) state.setStartedAt = Date.now();
   state.lastVideoTime = -1;
   state.liveStartedAt = Date.now();
   window.clearInterval(state.liveTimerInterval);
@@ -370,14 +507,20 @@ async function startLiveWorkout() {
     status: "en vivo",
     statusVariant: "active",
   });
+  speak("Javier activado. Te diré cuántas repeticiones llevas. Al completar ocho abriré tu dashboard.");
   predictPose();
+  if (autoRecord && !state.recording) {
+    await startRecording();
+  }
 }
 
 function stopLiveWorkout(message = "pausado") {
   state.liveActive = false;
   window.cancelAnimationFrame(state.liveAnimationFrame);
   window.clearInterval(state.liveTimerInterval);
-  els.liveStart.textContent = "Entrenar en vivo";
+  els.liveStart.textContent = state.workoutStartedAt && !state.workoutCompleted
+    ? "Continuar entrenamiento"
+    : "Empezar entrenamiento";
   updateLiveDashboard({
     coach: "Entrenamiento pausado. Toca Entrenar en vivo para continuar.",
     status: message,
@@ -385,18 +528,191 @@ function stopLiveWorkout(message = "pausado") {
   });
 }
 
+function recordCompletedSet() {
+  if (state.setRecorded || state.currentSetReps < REPS_PER_SET) return;
+  state.setRecorded = true;
+  state.completedSets += 1;
+  state.setHistory.push({
+    set: state.completedSets,
+    reps: state.currentSetReps,
+    durationSeconds: Math.round((Date.now() - (state.setStartedAt || Date.now())) / 1000),
+    averageAngle: Math.round(average(state.setAngles)),
+    warnings: state.setWarnings,
+  });
+  const isWorkoutReady = state.completedSets >= WORKOUT_SETS;
+  speak(isWorkoutReady
+    ? "Cuarto set completo. Ya puedes finalizar y revisar tu dashboard."
+    : `Set ${state.completedSets} completo. Descansa y reinicia el set cuando estés listo.`);
+  updateLiveDashboard({
+    coach: isWorkoutReady
+      ? "Objetivo completado. Revisa tus estadísticas o finaliza el entrenamiento."
+      : `Set ${state.completedSets} de ${WORKOUT_SETS} completo. Descansa antes del siguiente.`,
+    status: isWorkoutReady ? "listo para finalizar" : "set completo",
+    statusVariant: isWorkoutReady ? "active" : "warning",
+  });
+  render();
+}
+
 function resetLiveWorkout() {
   state.currentSetReps = 0;
-  state.totalReps = 0;
   state.curlPhase = "unknown";
+  state.setRecorded = false;
+  state.lastSpokenRep = 0;
+  state.lastMotivationAt = 0;
+  state.lastSpokenCue = "";
+  state.lastCueAt = 0;
+  state.torsoAnchorX = null;
+  state.setStartedAt = state.liveActive ? Date.now() : 0;
+  state.setAngles = [];
+  state.setWarnings = 0;
+  state.lastFormWarning = "";
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   state.liveStartedAt = state.liveActive ? Date.now() : 0;
   clearOverlay();
   updateLiveDashboard({
     angle: null,
-    coach: "Reiniciado. Empieza con el brazo extendido y visible.",
+    coach: state.completedSets >= WORKOUT_SETS
+      ? "Los 4 sets ya están completos. Puedes finalizar el entrenamiento."
+      : `Set ${currentSetNumber()} listo. Empieza con el brazo extendido y visible.`,
     status: state.liveActive ? "en vivo" : "pose lista",
     statusVariant: state.liveActive ? "active" : "",
   });
+}
+
+function workoutSummary() {
+  return {
+    id: sessionId(),
+    completedAt: new Date().toISOString(),
+    sets: state.completedSets,
+    reps: state.totalReps,
+    durationSeconds: Math.round((Date.now() - (state.workoutStartedAt || Date.now())) / 1000),
+    formScore: formScore(),
+    goodReps: state.goodReps,
+    warnings: state.formWarnings,
+    averageAngle: Math.round(average(state.angleSamples)),
+    setHistory: state.setHistory,
+  };
+}
+
+function renderResultsDashboard(summary) {
+  const duration = formatTime(summary.durationSeconds);
+  els.dashboardSubtitle.textContent = `${summary.reps} repeticiones registradas · ${duration} · técnica analizada en el dispositivo.`;
+  els.dashboardMetrics.innerHTML = [
+    ["Volumen", `${summary.reps} reps`],
+    ["Sets", `${summary.sets}/${WORKOUT_SETS}`],
+    ["Técnica", `${summary.formScore}%`],
+    ["Avisos", String(summary.warnings)],
+  ].map(([label, value]) => `<div class="metric-card"><span class="metric-label">${label}</span><strong class="metric-value">${value}</strong></div>`).join("");
+
+  els.dashboardSessionStatus.textContent = `${summary.reps}/${REPS_PER_SET} reps · ${summary.goodReps} limpias`;
+  els.dashboardSetList.innerHTML = summary.setHistory.map((set) => `
+    <div class="set-row">
+      <span><strong>Set ${set.set}</strong><small>${set.durationSeconds}s · ángulo medio ${set.averageAngle || "--"}°</small></span>
+      <span>${set.reps}/${REPS_PER_SET} reps${set.warnings ? ` · ${set.warnings} avisos` : " · OK"}</span>
+    </div>
+  `).join("");
+
+  els.nextRoutine.innerHTML = nextArmRoutine.map((item) => `
+    <div class="routine-row">
+      <span><strong>${item.name}</strong><small>${item.detail}</small></span>
+      <em>${item.cue}</em>
+    </div>
+  `).join("");
+  els.recoveryPlan.innerHTML = recoveryPlan.map((item) => `
+    <div class="recovery-item"><strong>${item.title}</strong><span>${item.text}</span></div>
+  `).join("");
+
+  const history = state.workoutHistory.slice(0, 5);
+  els.dashboardHistoryCount.textContent = `${history.length} sesiones guardadas`;
+  els.dashboardHistory.innerHTML = history.length ? history.map((item) => `
+    <div class="history-row">
+      <span><strong>${formatDate(item.completedAt)}</strong><small>${item.sets}/${WORKOUT_SETS} sets · ${formatTime(item.durationSeconds)}</small></span>
+      <span>${item.formScore}% técnica</span>
+    </div>
+  `).join("") : `<div class="history-row"><span>Esta es tu primera sesión registrada.</span></div>`;
+}
+
+async function saveWorkoutSummaryToAzure(summary) {
+  const payload = {
+    schema_version: 1,
+    type: "curl_workout_summary",
+    session_id: summary.id,
+    workout_id: summary.id,
+    exercise: "biceps_curl",
+    completed_at: summary.completedAt,
+    statistics: summary,
+    next_routine: nextArmRoutine,
+    recovery_plan: recoveryPlan,
+    source: "javier_ai_web",
+  };
+  const summaryBlob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+
+  if (apiBase) {
+    const response = await fetch(`${apiBase}/create-summary-upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: summary.id }),
+    });
+    if (!response.ok) throw new Error(`create-summary-upload ${response.status}`);
+    const upload = await response.json();
+    const uploadResponse = await fetch(upload.uploadUrl, {
+      method: "PUT",
+      headers: { "x-ms-blob-type": "BlockBlob", "Content-Type": "application/json" },
+      body: summaryBlob,
+    });
+    if (!uploadResponse.ok) throw new Error(`summary upload ${uploadResponse.status}`);
+    state.azureUploadCount += 1;
+    return upload.blobName;
+  }
+
+  if (containerSasUrl()) {
+    const blobName = `summaries/${safeBlobSegment(summary.id)}/workout-summary.json`;
+    await putBlob(blobName, summaryBlob, "application/json");
+    state.azureUploadCount += 1;
+    return blobName;
+  }
+
+  throw new Error("Azure no está configurado en docs/config.js");
+}
+
+function safeBlobSegment(value) {
+  return String(value || "session").replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 100) || "session";
+}
+
+function finishWorkout() {
+  if (!canFinishWorkout()) {
+    updateLiveDashboard({
+      coach: `No puedes finalizar todavía: completa ${WORKOUT_SETS} sets de ${REPS_PER_SET} repeticiones.`,
+      status: "objetivo pendiente",
+      statusVariant: "warning",
+    });
+    speak(`Aún no puedes finalizar. Completa los ${WORKOUT_SETS} sets de ${REPS_PER_SET}.`);
+    return;
+  }
+  if (state.recording) stopRecording();
+  const summary = workoutSummary();
+  state.workoutCompleted = true;
+  state.workoutHistory = [summary, ...state.workoutHistory.filter((item) => item.id !== summary.id)];
+  persistHistory();
+  stopLiveWorkout("completado");
+  renderResultsDashboard(summary);
+  els.resultsDashboard.hidden = false;
+  render();
+  els.dashboardSyncStatus.textContent = "Guardando en Azure…";
+  els.dashboardSyncStatus.classList.remove("ready", "warning");
+  saveWorkoutSummaryToAzure(summary)
+    .then((blobName) => {
+      els.dashboardSyncStatus.textContent = "Guardado en Azure";
+      els.dashboardSyncStatus.classList.add("ready");
+      els.status.textContent = `Resumen guardado en Azure: ${blobName}`;
+    })
+    .catch((error) => {
+      console.error("Azure summary upload failed", error);
+      els.dashboardSyncStatus.textContent = "Azure pendiente";
+      els.dashboardSyncStatus.classList.add("warning");
+      els.status.textContent = "Dashboard listo; no se pudo guardar en Azure";
+    });
+  speak("Entrenamiento completado. Tu dashboard y la rutina de brazo siguiente están listos.");
 }
 
 async function switchCamera() {
@@ -444,6 +760,26 @@ function elbowAngle(shoulder, elbow, wrist) {
   if (upperLength === 0 || lowerLength === 0) return null;
   const cosine = clamp((upper.x * lower.x + upper.y * lower.y) / (upperLength * lowerLength), -1, 1);
   return (Math.acos(cosine) * 180) / Math.PI;
+}
+
+function formWarning(landmarks, arm) {
+  const leftShoulder = landmarks[11];
+  const rightShoulder = landmarks[12];
+  if (!leftShoulder || !rightShoulder) return "";
+
+  const shoulderCenter = (leftShoulder.x + rightShoulder.x) / 2;
+  if (state.torsoAnchorX === null) state.torsoAnchorX = shoulderCenter;
+  const torsoDrift = Math.abs(shoulderCenter - state.torsoAnchorX);
+  state.torsoAnchorX = state.torsoAnchorX * 0.96 + shoulderCenter * 0.04;
+  if (torsoDrift > 0.1) return "Mantén el torso quieto; no balancees el cuerpo.";
+
+  const indexes = armLandmarks[arm];
+  const shoulder = landmarks[indexes.shoulder];
+  const elbow = landmarks[indexes.elbow];
+  if (shoulder && elbow && Math.abs(elbow.x - shoulder.x) > 0.24) {
+    return "Mantén el codo cerca del cuerpo y baja con control.";
+  }
+  return "";
 }
 
 function drawPose(landmarks, activeArm) {
@@ -516,11 +852,19 @@ function countCurl(angle) {
 
   if (angle < upAngle) {
     if (state.curlPhase === "down") {
+      if (state.currentSetReps >= REPS_PER_SET) {
+        return state.completedSets >= WORKOUT_SETS
+          ? "Los 4 sets están completos. Pulsa Finalizar entrenamiento."
+          : "Set completo. Reinicia el set después de descansar.";
+      }
       state.totalReps += 1;
       state.currentSetReps += 1;
       state.curlPhase = "up";
-      if (state.currentSetReps >= state.targetReps) {
-        return "Serie completa. Puedes pausar o reiniciar.";
+      if (state.currentSetReps >= REPS_PER_SET) {
+        recordCompletedSet();
+        return state.completedSets >= WORKOUT_SETS
+          ? "Cuarto set completo. Ya puedes finalizar."
+          : `Set ${state.completedSets} completo. Descansa y reinicia el set.`;
       }
       return `Curl ${state.totalReps} contada. Baja completo para la siguiente.`;
     }
@@ -571,13 +915,37 @@ function handlePoseResult(result) {
     return;
   }
 
-  const coach = countCurl(angle);
+  const repsBefore = state.currentSetReps;
+  const coachFromAngle = countCurl(angle);
+  const warning = formWarning(landmarks, arm);
+  state.angleSamples.push(angle);
+  state.setAngles.push(angle);
+  if (warning && warning !== state.lastFormWarning) {
+    state.formWarnings += 1;
+    state.setWarnings += 1;
+  }
+  state.lastFormWarning = warning;
+  const coach = warning || coachFromAngle;
+  if (state.currentSetReps > repsBefore) {
+    if (!warning) state.goodReps += 1;
+    announceRep();
+    motivate();
+  } else if (warning) {
+    speakFormCue(warning);
+  }
   updateLiveDashboard({
     angle,
     coach,
     status: "en vivo",
     statusVariant: "active",
   });
+  if (state.currentSetReps > repsBefore && canFinishWorkout() && !state.completionScheduled) {
+    state.completionScheduled = true;
+    window.setTimeout(() => {
+      state.completionScheduled = false;
+      finishWorkout();
+    }, 250);
+  }
 }
 
 function predictPose() {
@@ -591,7 +959,7 @@ function predictPose() {
 }
 
 function preferredMimeType() {
-  const options = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"];
+  const options = ["video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
   if (!window.MediaRecorder) return "";
   return options.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
@@ -641,8 +1009,26 @@ function videoDuration(file) {
   });
 }
 
-function startRecording() {
-  if (!state.stream || state.recording) return;
+async function startRecording() {
+  if (state.recording) return;
+  state.currentSetReps = 0;
+  state.setRecorded = false;
+  state.setStartedAt = Date.now();
+  state.setAngles = [];
+  state.setWarnings = 0;
+  state.lastSpokenRep = 0;
+  state.curlPhase = "unknown";
+  state.torsoAnchorX = null;
+  if (!state.liveActive) {
+    await startLiveWorkout({ autoRecord: false });
+  }
+  if (!state.stream) {
+    await startCamera();
+  }
+  if (!state.stream || !window.MediaRecorder) {
+    els.status.textContent = "Grabación no disponible";
+    return;
+  }
   state.chunks = [];
   state.recorderMimeType = preferredMimeType();
   const recorderOptions = state.recorderMimeType ? { mimeType: state.recorderMimeType } : undefined;
@@ -692,9 +1078,9 @@ function makeDownloads() {
     duration_seconds: Number(durationSeconds.toFixed(2)),
     recording_started_at: startedAt.toISOString(),
     created_at: new Date().toISOString(),
-    source: "iphone_safari_gym_capture",
-    training_intent: "good_form_only",
-    use_for_training: drill.exercise === "biceps_curl",
+    source: "iphone_safari_camera",
+    training_intent: "unreviewed",
+    use_for_training: false,
     video_file: `video.${extension}`,
     video_mime_type: mimeType,
   };
@@ -712,6 +1098,10 @@ function makeDownloads() {
   els.metadataDownload.download = `${basename}.json`;
   els.downloads.hidden = false;
   state.clipCount += 1;
+  els.status.textContent = apiBase || containerSasUrl()
+    ? "Clip listo; subiendo a Azure..."
+    : "Clip listo; descarga el video para guardarlo en tu iPhone";
+  speak(`Sesión guardada. Llevas ${state.currentSetReps} repeticiones en este set.`);
   render();
   uploadToAzure(videoBlob, metadataBlob, metadata).catch((error) => {
     console.error("Azure upload failed", error);
@@ -746,6 +1136,14 @@ async function uploadWithFunction(videoBlob, metadataBlob, metadata) {
     throw new Error(`create-upload ${createResponse.status}`);
   }
   const upload = await createResponse.json();
+  metadata.capture_id = upload.captureId;
+  metadata.video_blob = upload.video.blobName;
+  metadata.metadata_blob = upload.metadata.blobName;
+  metadata.azure_blob_prefix = upload.video.blobName.split("/").slice(0, -1).join("/");
+  metadata.video_file = upload.video.blobName.split("/").pop();
+  const canonicalMetadataBlob = new Blob([JSON.stringify(metadata, null, 2)], {
+    type: "application/json",
+  });
 
   const videoResponse = await fetch(upload.video.uploadUrl, {
     method: "PUT",
@@ -765,7 +1163,7 @@ async function uploadWithFunction(videoBlob, metadataBlob, metadata) {
       "x-ms-blob-type": "BlockBlob",
       "Content-Type": "application/json",
     },
-    body: metadataBlob,
+    body: canonicalMetadataBlob,
   });
   if (!metadataResponse.ok) {
     throw new Error(`metadata upload ${metadataResponse.status}`);
@@ -824,69 +1222,6 @@ async function uploadWithContainerSas(videoBlob, metadataBlob, metadata) {
   render();
 }
 
-async function importHeyCyanFile(file) {
-  if (!file) return;
-
-  els.heycyanStatus.textContent = "Preparando video...";
-  const drill = heyCyanDrill;
-  const startedAt = file.lastModified ? new Date(file.lastModified) : new Date();
-  const createdAt = new Date();
-  const durationSeconds = await videoDuration(file);
-  const captureId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-  const mimeType = mimeTypeForFile(file);
-  const extension = videoExtensionForFile(file);
-  const basename = `${sessionId()}_${drill.exercise}_${drill.label}_${drill.angle}_${workoutStamp(createdAt)}`;
-  const metadata = {
-    capture_id: captureId,
-    session_id: sessionId(),
-    workout_id: sessionId(),
-    label: drill.label,
-    exercise: drill.exercise,
-    camera_angle: drill.angle,
-    capture_type: drill.captureType,
-    drill_id: drill.id,
-    drill_title: drill.title,
-    target: drill.target,
-    cues: drill.cues,
-    duration_seconds: Number(durationSeconds.toFixed(2)),
-    recording_started_at: startedAt.toISOString(),
-    created_at: createdAt.toISOString(),
-    source: "heycyan_bv100_safari_file_import",
-    source_filename: file.name,
-    training_intent: "good_form_only",
-    use_for_training: true,
-    video_file: `video.${extension}`,
-    video_file_extension: extension,
-    video_mime_type: mimeType,
-  };
-  const blobPrefix = `${drill.label}/${drill.angle}/${metadata.session_id}/${captureId}`;
-  metadata.azure_blob_prefix = blobPrefix;
-  metadata.video_blob = `${blobPrefix}/${metadata.video_file}`;
-  metadata.metadata_blob = `${blobPrefix}/metadata.json`;
-
-  const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], {
-    type: "application/json",
-  });
-
-  els.videoDownload.href = URL.createObjectURL(file);
-  els.videoDownload.download = `${basename}.${extension}`;
-  els.metadataDownload.href = URL.createObjectURL(metadataBlob);
-  els.metadataDownload.download = `${basename}.json`;
-  els.downloads.hidden = false;
-  state.clipCount += 1;
-  render();
-
-  try {
-    els.heycyanStatus.textContent = containerSasUrl() || apiBase ? "Subiendo a Azure..." : "Importado local";
-    await uploadToAzure(file, metadataBlob, metadata);
-    els.heycyanStatus.textContent = containerSasUrl() || apiBase ? "HeyCyan subido" : "HeyCyan importado";
-  } catch (error) {
-    console.error("HeyCyan upload failed", error);
-    els.heycyanStatus.textContent = "Fallo subida";
-    alert(`HeyCyan upload failed: ${error.message || error}`);
-  }
-}
-
 els.previous.addEventListener("click", () => {
   if (state.recording) return;
   state.selectedIndex = state.selectedIndex === 0 ? drills.length - 1 : state.selectedIndex - 1;
@@ -903,8 +1238,27 @@ els.record.addEventListener("click", () => {
   if (state.recording) {
     stopRecording();
   } else {
-    startRecording();
+    startRecording().catch((error) => {
+      console.error("Recording failed", error);
+      els.status.textContent = "No se pudo iniciar la grabación";
+    });
   }
+});
+
+els.cameraStart.addEventListener("click", () => {
+  startCamera().catch((error) => {
+    console.error("Camera failed", error);
+  });
+});
+
+els.voiceToggle.addEventListener("click", () => {
+  state.voiceEnabled = !state.voiceEnabled;
+  if (!state.voiceEnabled && "speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  } else {
+    speak(state.liveActive ? "Voz activada. Estoy contigo." : "Voz activada. Pulsa Activar Javier para empezar.", { force: true });
+  }
+  render();
 });
 
 els.saveAzure.addEventListener("click", () => {
@@ -919,8 +1273,19 @@ els.newSession.addEventListener("click", () => {
   localStorage.setItem("curlVisionWorkoutId", state.workoutId);
   state.clipCount = 0;
   state.azureUploadCount = 0;
+  state.completedSets = 0;
+  state.totalReps = 0;
+  state.workoutStartedAt = 0;
+  state.workoutCompleted = false;
+  state.formWarnings = 0;
+  state.goodReps = 0;
+  state.angleSamples = [];
+  state.setHistory = [];
+  state.completionScheduled = false;
+  els.resultsDashboard.hidden = true;
+  resetLiveWorkout();
   els.downloads.hidden = true;
-  els.status.textContent = "Nueva sesion lista";
+  els.status.textContent = "Nueva sesión lista";
   render();
 });
 
@@ -933,6 +1298,17 @@ els.liveStart.addEventListener("click", () => {
 
 els.liveReset.addEventListener("click", resetLiveWorkout);
 
+els.finishWorkout.addEventListener("click", finishWorkout);
+
+els.dashboardClose.addEventListener("click", () => {
+  els.resultsDashboard.hidden = true;
+});
+
+els.dashboardNewSession.addEventListener("click", () => {
+  els.resultsDashboard.hidden = true;
+  els.newSession.click();
+});
+
 els.switchCamera.addEventListener("click", () => {
   switchCamera().catch((error) => {
     console.error("Camera switch failed", error);
@@ -940,19 +1316,17 @@ els.switchCamera.addEventListener("click", () => {
   });
 });
 
-els.heycyanImport.addEventListener("click", () => {
-  els.heycyanFile.click();
-});
-
-els.heycyanFile.addEventListener("change", () => {
-  const file = els.heycyanFile.files?.[0];
-  importHeyCyanFile(file).finally(() => {
-    els.heycyanFile.value = "";
-  });
-});
-
 els.azureSas.value = containerSasUrl();
 render();
 updateLiveDashboard();
 window.addEventListener("resize", resizeOverlay);
-startCamera();
+
+if (window.isSecureContext || ["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+  startCamera();
+}
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch((error) => {
+    console.warn("PWA registration failed", error);
+  });
+}
