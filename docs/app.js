@@ -80,6 +80,7 @@ const state = {
   briefingFinished: false,
   briefingMinimumUntil: 0,
   countdownTimer: 0,
+  voicePhase: "idle",
 };
 
 const els = {
@@ -476,7 +477,10 @@ function spanishVoice() {
     || null;
 }
 
-function speak(text, { force = false, onend = null, onerror = null } = {}) {
+function speak(text, { force = false, onend = null, onerror = null, channel = "workout" } = {}) {
+  const sequenceLocked = state.voicePhase === "briefing" || state.voicePhase === "countdown";
+  if (sequenceLocked && channel !== "sequence" && channel !== "control") return null;
+  if (state.voicePhase === "complete" && channel === "workout") return null;
   if ((!state.voiceEnabled && !force) || !("speechSynthesis" in window)) {
     if (onend) window.setTimeout(onend, 0);
     return null;
@@ -525,12 +529,14 @@ function announceSessionBriefing({ continuation = false } = {}) {
   state.briefingUntil = Date.now() + (continuation ? 3500 : 9000);
   state.briefingMinimumUntil = Date.now() + (continuation ? 6000 : 14000);
   state.briefingFinished = false;
+  state.voicePhase = "briefing";
   window.clearTimeout(state.countdownTimer);
   state.countingEnabled = false;
   state.countdownActive = false;
   speak(visiblePlan, {
     onend: queueCountdownAfterBriefing,
     onerror: queueCountdownAfterBriefing,
+    channel: "sequence",
   });
   state.sessionIntroSpoken = true;
 }
@@ -546,6 +552,7 @@ function queueCountdownAfterBriefing() {
 function startCountdown() {
   if (state.countdownActive || state.workoutCompleted || !state.briefingFinished) return;
   state.countdownActive = true;
+  state.voicePhase = "countdown";
   state.countingEnabled = false;
   state.lastSpokenRep = 0;
   state.lastSpokenCue = "";
@@ -554,6 +561,7 @@ function startCountdown() {
     if (count > 3) {
       state.countdownActive = false;
       state.countingEnabled = true;
+      state.voicePhase = "workout";
       state.briefingUntil = 0;
       els.liveCoach.textContent = "Ahora sí. Empieza con el brazo extendido.";
       setLiveStatus("en vivo", "active");
@@ -561,7 +569,7 @@ function startCountdown() {
     }
     const phrase = count === 3 ? "Tres. Ahora empieza." : String(count);
     count += 1;
-    speak(phrase, { onend: () => window.setTimeout(sayNext, 220) });
+    speak(phrase, { onend: () => window.setTimeout(sayNext, 220), channel: "sequence" });
   };
   els.liveCoach.textContent = "Prepárate. La sesión comienza después de la cuenta atrás.";
   setLiveStatus("preparando", "warning");
@@ -683,6 +691,7 @@ function stopLiveWorkout(message = "pausado") {
   state.countingEnabled = false;
   state.countdownActive = false;
   state.briefingFinished = false;
+  state.voicePhase = "idle";
   window.clearTimeout(state.countdownTimer);
   state.speechRunId += 1;
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -725,6 +734,7 @@ function resetLiveWorkout() {
   state.countingEnabled = false;
   state.countdownActive = false;
   state.briefingFinished = false;
+  state.voicePhase = "idle";
   window.clearTimeout(state.countdownTimer);
   state.curlPhase = "unknown";
   state.setRecorded = false;
@@ -896,7 +906,8 @@ function finishWorkout() {
       renderSaveLog("pending", "Se conserva localmente y se podrá sincronizar al recuperar conexión");
       els.status.textContent = "Dashboard listo; no se pudo guardar en Azure";
     });
-  speak("Excelente trabajo, Omar. Has completado tu sesión de curl. Respira, hidrátate y descansa. Tu dashboard y la siguiente rutina ya están listos.");
+  state.voicePhase = "complete";
+  speak("Excelente trabajo, Omar. Has completado tu sesión de curl. Respira, hidrátate y descansa. Tu dashboard y la siguiente rutina ya están listos.", { channel: "complete" });
 }
 
 async function switchCamera() {
@@ -1455,7 +1466,7 @@ els.voiceToggle.addEventListener("click", () => {
   if (!state.voiceEnabled && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
   } else {
-    speak(state.liveActive ? "Voz activada. Estoy contigo." : "Voz activada. Pulsa Activar Javier para empezar.", { force: true });
+    speak(state.liveActive ? "Voz activada. Estoy contigo." : "Voz activada. Pulsa Empezar entrenamiento para comenzar.", { force: true, channel: "control" });
   }
   render();
 });
@@ -1529,7 +1540,9 @@ if (window.isSecureContext || ["localhost", "127.0.0.1"].includes(window.locatio
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch((error) => {
-    console.warn("PWA registration failed", error);
-  });
+  navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+    .then((registration) => registration.update())
+    .catch((error) => {
+      console.warn("PWA registration failed", error);
+    });
 }
