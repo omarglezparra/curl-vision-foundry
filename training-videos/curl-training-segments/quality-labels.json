@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "exercise": "strict_dumbbell_biceps_curl",
+  "annotation_method": "Manual interval review of the user-selected clips and their on-screen red-X/green-check coaching overlays.",
+  "rights_status": "unverified_private_training_only",
+  "crop": {
+    "x_min_ratio": 0.29,
+    "x_max_ratio": 0.71,
+    "y_min_ratio": 0.0,
+    "y_max_ratio": 1.0
+  },
+  "labels": {
+    "good": "Comparable real-person strict curl footage with an explicit correct-form indication or a clean user-selected demonstration.",
+    "bad": "Comparable real-person footage explicitly presented as an error.",
+    "exclude": "Transition, explanation-only shot, animation, two-person comparison, or a different curl variant/equipment."
+  },
+  "videos": [
+    {
+      "file": "Curl training.mp4",
+      "camera_view": "side",
+      "intervals": [
+        { "start": 0.0, "end": 1.95, "label": "bad", "error": "elbow_forward" },
+        { "start": 2.2, "end": 8.1, "label": "good", "error": null }
+      ]
+    },
+    {
+      "file": "curl training right side.mp4",
+      "camera_view": "side_and_front",
+      "intervals": [
+        { "start": 5.0, "end": 9.9, "label": "bad", "error": "elbow_forward" },
+        { "start": 13.8, "end": 16.4, "label": "good", "error": null },
+        { "start": 28.0, "end": 31.8, "label": "bad", "error": "shoulder_shrug" },
+        { "start": 32.6, "end": 35.2, "label": "good", "error": null }
+      ]
+    },
+    {
+      "file": "curl training front and side.mp4",
+      "camera_view": "front_then_side",
+      "intervals": [
+        { "start": 0.3, "end": 15.2, "label": "good", "error": null },
+        { "start": 17.0, "end": 25.8, "label": "good", "error": null }
+      ]
+    },
+    {
+      "file": "curl trainin 45 degree.mp4",
+      "camera_view": "front_oblique",
+      "intervals": [
+        { "start": 0.5, "end": 45.5, "label": "good", "error": null }
+      ]
+    }
+  ],
+  "reference_only": [
+    { "file": "Curl training_2.mp4", "reason": "Two people and an edited camera jump make the single-pose sequence inconsistent; the first trial showed that it reduced grouped-video AUC to near chance." },
+    { "file": "Curl training_left side.mp4", "reason": "Correct and incorrect people share one frame; a single-pose detector cannot assign the frame label safely." },
+    { "file": "curl training instructions and best practices.mp4", "reason": "Animated instruction rather than comparable camera footage." },
+    { "file": "Curl_martillo.mp4", "reason": "Hammer-curl variant; retained for a future exercise-specific model." },
+    { "file": "Biceps con barra.mp4", "reason": "Barbell variant; retained for a future exercise-specific model." },
+    { "file": "Curl Training Front.mp4", "reason": "Technique tutorial with advanced variations and no unambiguous good/bad interval overlay." }
+  ]
+}

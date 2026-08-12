@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "model_id": "curl-quality-v1",
+  "exercise": "strict_dumbbell_biceps_curl",
+  "generated_at_utc": "2026-08-12T15:55:24+00:00",
+  "purpose": "Reject technically invalid curl attempts before incrementing the repetition counter and return one specific correction.",
+  "pose_runtime": {
+    "family": "MediaPipe Pose Landmarker",
+    "landmarks": "normalized_2d",
+    "training_sample_fps": 12.0,
+    "runtime_smoothing_alpha": 0.32
+  },
+  "dataset": {
+    "rights_status": "unverified_private_training_only",
+    "video_count": 4,
+    "source_videos": [
+      "Curl training.mp4",
+      "curl training right side.mp4",
+      "curl training front and side.mp4",
+      "curl trainin 45 degree.mp4"
+    ],
+    "labeled_interval_count": 9,
+    "window_count": 427,
+    "good_window_count": 393,
+    "bad_window_count": 34,
+    "complete_attempt_count": 21,
+    "annotation_method": "Manual interval review of the user-selected clips and their on-screen red-X/green-check coaching overlays."
+  },
+  "features": [
+    "upper_arm_tilt_p90_deg",
+    "upper_arm_drift_p90_deg",
+    "torso_tilt_p90_deg",
+    "torso_lean_change_p90_deg",
+    "body_shift_p90_ratio",
+    "shoulder_shift_p90_ratio",
+    "shoulder_lift_p90_ratio",
+    "elbow_offset_p90_ratio",
+    "elbow_offset_change_p90_ratio",
+    "neck_shorten_p90_ratio"
+  ],
+  "standard_scaler": {
+    "mean": [
+      16.8988038,
+      11.86234954,
+      4.53933442,
+      3.01243441,
+      0.07667429,
+      0.12508033,
+      0.04968471,
+      0.14662941,
+      0.07663559,
+      0.02061146
+    ],
+    "scale": [
+      12.01879972,
+      13.56868055,
+      2.29929938,
+      2.37366516,
+      0.15089655,
+      0.20089869,
+      0.09349053,
+      0.08963615,
+      0.07460222,
+      0.02983101
+    ]
+  },
+  "classifier": {
+    "type": "binary_logistic_regression",
+    "positive_class": "good",
+    "coefficients": [
+      -0.8553618,
+      -0.15069106,
+      2.32926359,
+      0.24939671,
+      0.23254979,
+      0.6907551,
+      -1.06247938,
+      -1.21367054,
+      -1.5850336,
+      -0.0357169
+    ],
+    "intercept": 3.82570351,
+    "good_probability_threshold": 0.77
+  },
+  "counting": {
+    "down_angle_deg": 128.14,
+    "up_angle_deg": 72.0,
+    "minimum_range_of_motion_deg": 80.74,
+    "minimum_rep_seconds": 0.8,
+    "maximum_rep_seconds": 8.0,
+    "minimum_visibility": 0.48,
+    "maximum_upper_arm_tilt_p90_deg": 35.9782,
+    "maximum_upper_arm_drift_p90_deg": 37.7187,
+    "maximum_torso_lean_change_p90_deg": 12.0,
+    "maximum_body_shift_p90_ratio": 0.415,
+    "maximum_shoulder_lift_p90_ratio": 0.1232
+  },
+  "evaluation": {
+    "split_strategy": "GroupKFold(4) by complete source video",
+    "threshold_selection": "Maximize bad-form rejection while retaining at least 80% grouped-CV good-form recall.",
+    "good_probability_threshold": 0.77,
+    "accuracy": 0.8642,
+    "balanced_accuracy": 0.8322,
+    "good_precision": 0.9799,
+    "good_recall": 0.8702,
+    "bad_rejection_rate": 0.7941,
+    "roc_auc": 0.8815,
+    "confusion_matrix_labels_bad_good": [
+      [
+        27,
+        7
+      ],
+      [
+        51,
+        342
+      ]
+    ],
+    "threshold_metrics": {
+      "good_recall": 0.8702,
+      "bad_rejection_rate": 0.7941,
+      "balanced_accuracy": 0.8322
+    },
+    "per_video": {
+      "Curl training.mp4": {
+        "windows": 19,
+        "good_windows": 15,
+        "bad_windows": 4,
+        "accuracy": 0.9474
+      },
+      "curl trainin 45 degree.mp4": {
+        "windows": 254,
+        "good_windows": 254,
+        "bad_windows": 0,
+        "accuracy": 0.8425
+      },
+      "curl training front and side.mp4": {
+        "windows": 105,
+        "good_windows": 105,
+        "bad_windows": 0,
+        "accuracy": 0.9333
+      },
+      "curl training right side.mp4": {
+        "windows": 49,
+        "good_windows": 19,
+        "bad_windows": 30,
+        "accuracy": 0.7959
+      }
+    },
+    "deployment_gate": {
+      "eligible": true,
+      "minimum_roc_auc": 0.75,
+      "minimum_good_recall": 0.8,
+      "minimum_bad_rejection_rate": 0.65,
+      "minimum_good_attempt_acceptance": 0.8,
+      "minimum_bad_attempt_rejection": 0.75
+    },
+    "labeled_attempt_sanity_check": {
+      "note": "Secondary in-sample full-attempt check; grouped-video window metrics remain the primary generalization estimate.",
+      "good_attempts": 17,
+      "bad_attempts": 4,
+      "good_attempt_acceptance": 0.8235,
+      "bad_attempt_rejection": 1.0,
+      "result_counts": {
+        "range": 4,
+        "accepted": 14,
+        "model": 3
+      }
+    }
+  },
+  "coaching": {
+    "range": "Intento no contado: completa el recorrido; extiende abajo y flexiona arriba.",
+    "elbow": "Intento no contado: fija el codo junto al costado; no lo lleves hacia delante.",
+    "torso": "Intento no contado: evita el impulso y mantén el torso quieto.",
+    "shoulder": "Intento no contado: baja los hombros y no los encojas al subir.",
+    "speed": "Intento no contado: haz la repetición más lenta y controla la bajada.",
+    "visibility": "Intento no contado: necesito ver hombro, codo, muñeca y cadera durante todo el recorrido.",
+    "quality": "Intento no contado: repite con el torso quieto y el codo estable."
+  }
+}
