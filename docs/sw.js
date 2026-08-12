@@ -1,5 +1,14 @@
-const CACHE_NAME = "javier-ai-coach-v11-fluid-history";
-const APP_SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./config.js", "./manifest.webmanifest"];
+const CACHE_NAME = "javier-ai-coach-v12-curl-quality";
+const APP_SHELL = [
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./app.js",
+  "./curl-quality.js",
+  "./models/curl-quality-v1.json",
+  "./config.js",
+  "./manifest.webmanifest",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

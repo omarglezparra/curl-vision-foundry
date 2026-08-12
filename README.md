@@ -16,6 +16,8 @@ infrastructure scripts.
 ## Project Layout
 
 - `src/foundry_check.py` verifies local dependencies and basic environment setup.
+- `src/train_curl_quality.py` trains and gates the deployed curl-form classifier.
+- `docs/curl-quality-model.md` documents its dataset, evaluation, runtime behavior, and limitations.
 - `src/train_placeholder.py` is a minimal training entry point placeholder.
 - `infra/compute-cpu.yml` defines a CPU training compute target.
 - `infra/create-training-compute.ps1` creates or updates the compute target.

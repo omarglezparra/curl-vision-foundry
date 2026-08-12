@@ -2,6 +2,11 @@ import {
   FilesetResolver,
   PoseLandmarker,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35";
+import {
+  createCurlQualitySample,
+  CurlAttemptTracker,
+  validateCurlQualityModel,
+} from "./curl-quality.js";
 
 const drills = [
   {
@@ -11,7 +16,7 @@ const drills = [
     angle: "front",
     captureType: "set",
     title: "Curl estricto",
-    target: "Objetivo: 1 sesión de 8 repeticiones",
+    target: "Objetivo: 1 sesión de 8 repeticiones válidas",
     cues: ["Codo estable", "Torso quieto", "Rango completo", "Bajada controlada"],
   },
 ];
@@ -62,6 +67,9 @@ const state = {
   poseLandmarker: null,
   poseLoading: false,
   poseLoadPromise: null,
+  curlQualityModel: null,
+  curlQualityLoadPromise: null,
+  curlQualityTracker: null,
   liveActive: false,
   liveStartedAt: 0,
   liveTimerInterval: 0,
@@ -88,6 +96,13 @@ const state = {
   setWarnings: 0,
   formWarnings: 0,
   goodReps: 0,
+  attemptedReps: 0,
+  rejectedReps: 0,
+  setAttemptedReps: 0,
+  setRejectedReps: 0,
+  rejectionReasons: {},
+  qualityScores: [],
+  setQualityScores: [],
   lastFormWarning: "",
   angleSamples: [],
   setHistory: [],
@@ -149,6 +164,7 @@ const els = {
   cameraStart: document.getElementById("camera-start"),
   liveStatus: document.getElementById("live-status"),
   liveReps: document.getElementById("live-reps"),
+  liveRejected: document.getElementById("live-rejected"),
   liveAngle: document.getElementById("live-angle"),
   liveTime: document.getElementById("live-time"),
   liveProgressBar: document.getElementById("live-progress-bar"),
@@ -193,6 +209,7 @@ const els = {
 const poseModelUrl =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
 const poseWasmUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
+const curlQualityModelUrl = "./models/curl-quality-v1.json";
 const armLandmarks = {
   left: { shoulder: 11, elbow: 13, wrist: 15 },
   right: { shoulder: 12, elbow: 14, wrist: 16 },
@@ -326,8 +343,8 @@ function average(values) {
 }
 
 function formScore() {
-  const totalReps = Math.max(state.totalReps, 1);
-  return Math.round(clamp(100 - (state.formWarnings / totalReps) * 100, 0, 100));
+  const attempts = Math.max(state.attemptedReps, state.totalReps, 1);
+  return Math.round(clamp((state.goodReps / attempts) * 100, 0, 100));
 }
 
 function formatDate(value) {
@@ -353,7 +370,8 @@ function historyFor(summary) {
 }
 
 function buildNextSession(summary, history) {
-  const techniqueReady = summary.formScore >= 88 && summary.warnings <= 1;
+  const rejectedReps = Number(summary.rejectedReps ?? summary.warnings ?? 0);
+  const techniqueReady = summary.formScore >= 88 && rejectedReps <= 1;
   const recentAverage = Math.round(average(history.map((item) => Number(item.formScore) || 0)));
   const sessionNumber = Math.max(Number(summary.sessionNumber) || 0, highestSessionNumber(history)) + 1;
   if (techniqueReady) {
@@ -384,7 +402,7 @@ function buildNextSession(summary, history) {
       { name: "Curl inclinado", detail: "2 series · 8–10 reps · 120 s", cue: "Rango completo" },
       { name: "Extensión de tríceps", detail: "2 series · 10 reps · 90 s", cue: "Sin balanceo" },
     ],
-    note: `Javier detectó ${summary.warnings} avisos de técnica. Repite una carga cómoda y detén la serie cuando aparezca el primer fallo técnico. Media reciente: ${recentAverage}%.`,
+    note: `Javier no contó ${rejectedReps} intentos por técnica. Repite una carga cómoda y detén la serie cuando aparezca el primer fallo técnico. Media reciente: ${recentAverage}%.`,
   };
 }
 
@@ -589,6 +607,7 @@ function updateLiveTime() {
 
 function updateLiveDashboard({ angle = null, coach = null, status = null, statusVariant = "" } = {}) {
   els.liveReps.textContent = String(state.totalReps);
+  if (els.liveRejected) els.liveRejected.textContent = String(state.rejectedReps);
   els.liveAngle.textContent = angle === null ? "--" : `${Math.round(angle)}°`;
   els.liveProgressBar.style.width = `${clamp(((state.completedSets * REPS_PER_SET + state.currentSetReps) / (WORKOUT_SETS * REPS_PER_SET)) * 100, 0, 100)}%`;
   setProgressText();
@@ -729,7 +748,7 @@ function announceSessionBriefing({ continuation = false } = {}) {
   const exerciseNames = plan.exercises.slice(0, 3).map((exercise) => exercise.name).join(", ");
   const visiblePlan = continuation
     ? `Continuamos con la sesión ${state.sessionNumber}. Completa las repeticiones pendientes de curl con el torso quieto y una bajada controlada.`
-    : `Hola Omar. Sesión ${state.sessionNumber}. Hoy es ${dateLabel} y vamos a trabajar ${plan.focus.toLowerCase()}. Tu rutina incluye ${exerciseNames}. Primero te guiaré en un bloque de ${REPS_PER_SET} repeticiones de curl estricto. Mantén el codo estable, el torso quieto y controla la bajada. Cuando termine este resumen contaré uno, dos, tres. Solo después de tres empezaremos a contar tus repeticiones.`;
+    : `Hola Omar. Sesión ${state.sessionNumber}. Hoy es ${dateLabel} y vamos a trabajar ${plan.focus.toLowerCase()}. Tu rutina incluye ${exerciseNames}. Primero te guiaré en un bloque de ${REPS_PER_SET} repeticiones válidas de curl estricto. Mantén el codo estable, el torso quieto y controla la bajada. Validaré cada repetición cuando vuelvas a extender el brazo; si la técnica falla, no la contaré y te diré qué corregir. Cuando termine este resumen contaré uno, dos, tres. Solo después de tres empezaremos.`;
   els.liveCoach.textContent = visiblePlan;
   setLiveStatus(continuation ? "continuamos" : "briefing", "active");
   state.briefingUntil = Number.POSITIVE_INFINITY;
@@ -772,7 +791,7 @@ function startCountdown() {
     state.countingEnabled = true;
     state.voicePhase = "workout";
     state.briefingUntil = 0;
-    els.liveCoach.textContent = "Ahora sí. Empieza con el brazo completamente extendido.";
+    els.liveCoach.textContent = "Ahora sí. Empieza extendido; subir y volver a bajar completa una repetición válida.";
     setLiveStatus("en vivo", "active");
     startTrackingAfterCountdown().catch((error) => {
       console.error("Tracking start failed", error);
@@ -873,6 +892,34 @@ async function loadPoseModel() {
   }
 }
 
+async function loadCurlQualityModel() {
+  if (state.curlQualityModel && state.curlQualityTracker) return state.curlQualityModel;
+  if (state.curlQualityLoadPromise) return state.curlQualityLoadPromise;
+
+  state.curlQualityLoadPromise = (async () => {
+    const response = await fetch(curlQualityModelUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error(`curl quality model ${response.status}`);
+    const model = validateCurlQualityModel(await response.json());
+    state.curlQualityModel = model;
+    state.curlQualityTracker = new CurlAttemptTracker(model);
+    return model;
+  })();
+
+  try {
+    return await state.curlQualityLoadPromise;
+  } catch (error) {
+    state.curlQualityLoadPromise = null;
+    state.curlQualityModel = null;
+    state.curlQualityTracker = null;
+    updateLiveDashboard({
+      coach: "No pude cargar el modelo de calidad de curl. Revisa la conexión y vuelve a intentar.",
+      status: "sin modelo",
+      statusVariant: "warning",
+    });
+    throw error;
+  }
+}
+
 async function startLiveWorkout({ autoRecord = true } = {}) {
   if (state.workoutCompleted) return;
   if (state.liveActive) {
@@ -888,7 +935,7 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
   }
   if (!state.stream) return;
 
-  const poseReady = loadPoseModel();
+  const trackingReady = Promise.all([loadPoseModel(), loadCurlQualityModel()]);
   state.liveActive = true;
   if (!state.workoutStartedAt) state.workoutStartedAt = Date.now();
   if (!state.setStartedAt) state.setStartedAt = Date.now();
@@ -907,13 +954,19 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
   } else if (wasAlreadyStarted) {
     announceSessionBriefing({ continuation: true });
   }
-  await poseReady;
+  await trackingReady;
 }
 
 async function startTrackingAfterCountdown() {
   if (!state.liveActive || !state.countingEnabled || state.trackingStarted) return;
-  await loadPoseModel();
-  if (!state.liveActive || !state.countingEnabled || !state.poseLandmarker || state.trackingStarted) return;
+  await Promise.all([loadPoseModel(), loadCurlQualityModel()]);
+  if (
+    !state.liveActive
+    || !state.countingEnabled
+    || !state.poseLandmarker
+    || !state.curlQualityTracker
+    || state.trackingStarted
+  ) return;
   if (state.autoRecordAfterCountdown && !state.recording) {
     await startRecording();
   }
@@ -929,6 +982,8 @@ function stopLiveWorkout(message = "pausado") {
   state.countdownActive = false;
   state.briefingFinished = false;
   state.voicePhase = "idle";
+  state.smoothedAngle = null;
+  state.curlQualityTracker?.reset();
   window.clearTimeout(state.countdownTimer);
   clearSpeechQueue();
   window.cancelAnimationFrame(state.liveAnimationFrame);
@@ -950,8 +1005,11 @@ function recordCompletedSet() {
   state.setHistory.push({
     set: state.completedSets,
     reps: state.currentSetReps,
+    attempts: state.setAttemptedReps,
+    rejectedReps: state.setRejectedReps,
     durationSeconds: Math.round((Date.now() - (state.setStartedAt || Date.now())) / 1000),
     averageAngle: Math.round(average(state.setAngles)),
+    averageQuality: Math.round(average(state.setQualityScores)),
     warnings: state.setWarnings,
   });
   const isWorkoutReady = state.completedSets >= WORKOUT_SETS;
@@ -984,11 +1042,15 @@ function resetLiveWorkout() {
   state.setStartedAt = state.liveActive ? Date.now() : 0;
   state.setAngles = [];
   state.setWarnings = 0;
+  state.setAttemptedReps = 0;
+  state.setRejectedReps = 0;
+  state.setQualityScores = [];
   state.lastFormWarning = "";
   state.smoothedAngle = null;
   state.phaseCandidate = "unknown";
   state.phaseCandidateFrames = 0;
   state.lastRepAt = 0;
+  state.curlQualityTracker?.reset();
   clearSpeechQueue();
   state.liveStartedAt = state.liveActive ? Date.now() : 0;
   clearOverlay();
@@ -1009,10 +1071,20 @@ function workoutSummary() {
     completedAt: new Date().toISOString(),
     sets: state.completedSets,
     reps: state.totalReps,
+    attempts: state.attemptedReps,
+    rejectedReps: state.rejectedReps,
     durationSeconds: Math.round((Date.now() - (state.workoutStartedAt || Date.now())) / 1000),
     formScore: formScore(),
     goodReps: state.goodReps,
     warnings: state.formWarnings,
+    rejectionReasons: state.rejectionReasons,
+    averageQuality: Math.round(average(state.qualityScores)),
+    qualityModelId: state.curlQualityModel?.model_id || "curl-quality-v1",
+    qualityModelMetrics: state.curlQualityModel ? {
+      rocAuc: state.curlQualityModel.evaluation.roc_auc,
+      goodRecall: state.curlQualityModel.evaluation.good_recall,
+      badRejectionRate: state.curlQualityModel.evaluation.bad_rejection_rate,
+    } : null,
     averageAngle: Math.round(average(state.angleSamples)),
     setHistory: state.setHistory,
     sessionPlan: state.activeSessionPlan,
@@ -1065,26 +1137,28 @@ function renderResultsDashboard(summary, { syncState = "saving", page = "summary
   const duration = formatTime(summary.durationSeconds);
   const history = historyFor(summary);
   const nextSession = summary.nextSessionPlan || buildNextSession(summary, history);
+  const rejectedReps = Number(summary.rejectedReps ?? summary.warnings ?? 0);
+  const attempts = Number(summary.attempts) || Number(summary.reps || 0) + rejectedReps;
   state.currentDashboardSummary = summary;
   state.nextSessionPlan = nextSession;
   els.dashboardSyncStatus.classList.remove("ready", "warning");
   els.dashboardTitle.textContent = `Sesión ${summary.sessionNumber || history.length} completada`;
-  els.dashboardSubtitle.textContent = `Sesión ${summary.sessionNumber || history.length} · ${summary.reps} repeticiones · ${duration} · técnica analizada en el dispositivo.`;
+  els.dashboardSubtitle.textContent = `Sesión ${summary.sessionNumber || history.length} · ${summary.reps} válidas de ${attempts} intentos · ${duration} · modelo ${summary.qualityModelId || "de calidad local"}.`;
   els.dashboardMetrics.innerHTML = [
-    ["Volumen", `${summary.reps} reps`],
-    ["Sets", `${summary.sets}/${WORKOUT_SETS}`],
+    ["Reps válidas", `${summary.reps}`],
+    ["Intentos", `${attempts}`],
     ["Técnica", `${summary.formScore}%`],
-    ["Avisos", String(summary.warnings)],
+    ["No contadas", String(rejectedReps)],
   ].map(([label, value]) => `<div class="metric-card"><span class="metric-label">${label}</span><strong class="metric-value">${value}</strong></div>`).join("");
 
-  els.dashboardSessionStatus.textContent = `${summary.reps}/${REPS_PER_SET} reps · ${summary.goodReps || 0} limpias`;
+  els.dashboardSessionStatus.textContent = `${summary.reps}/${REPS_PER_SET} válidas · ${rejectedReps} no contadas`;
   const setHistory = Array.isArray(summary.setHistory) && summary.setHistory.length
     ? summary.setHistory
     : [{ set: 1, reps: summary.reps, durationSeconds: summary.durationSeconds, averageAngle: summary.averageAngle, warnings: summary.warnings }];
   els.dashboardSetList.innerHTML = setHistory.map((set) => `
     <div class="set-row">
-      <span><strong>Set ${set.set}</strong><small>${set.durationSeconds}s · ángulo medio ${set.averageAngle || "--"}°</small></span>
-      <span>${set.reps}/${REPS_PER_SET} reps${set.warnings ? ` · ${set.warnings} avisos` : " · OK"}</span>
+      <span><strong>Set ${set.set}</strong><small>${set.durationSeconds}s · ángulo medio ${set.averageAngle || "--"}° · calidad ${set.averageQuality || summary.averageQuality || "--"}%</small></span>
+      <span>${set.reps}/${REPS_PER_SET} válidas${Number(set.rejectedReps ?? set.warnings ?? 0) ? ` · ${Number(set.rejectedReps ?? set.warnings ?? 0)} no contadas` : " · sin rechazos"}</span>
     </div>
   `).join("");
 
@@ -1108,7 +1182,7 @@ function renderResultsDashboard(summary, { syncState = "saving", page = "summary
   els.dashboardHistoryCount.textContent = `${history.length} sesiones guardadas`;
   els.dashboardHistory.innerHTML = history.length ? history.map((item, index) => `
     <div class="history-row">
-      <span><strong>Sesión ${item.sessionNumber || Math.max(history.length - index, 1)} · ${formatDate(item.completedAt)}</strong><small>${item.reps || 0} reps · ${formatTime(item.durationSeconds)} · ${item.warnings || 0} avisos</small></span>
+      <span><strong>Sesión ${item.sessionNumber || Math.max(history.length - index, 1)} · ${formatDate(item.completedAt)}</strong><small>${item.reps || 0} válidas · ${formatTime(item.durationSeconds)} · ${Number(item.rejectedReps ?? item.warnings ?? 0)} no contadas</small></span>
       <span>${item.formScore || 0}% técnica</span>
     </div>
   `).join("") : `<div class="history-row"><span>Esta es tu primera sesión registrada.</span></div>`;
@@ -1296,24 +1370,43 @@ function elbowAngle(shoulder, elbow, wrist) {
   return (Math.acos(cosine) * 180) / Math.PI;
 }
 
-function formWarning(landmarks, arm) {
-  const leftShoulder = landmarks[11];
-  const rightShoulder = landmarks[12];
-  if (!leftShoulder || !rightShoulder) return "";
+function registerAcceptedCurl(quality) {
+  state.attemptedReps += 1;
+  state.setAttemptedReps += 1;
+  state.totalReps += 1;
+  state.currentSetReps += 1;
+  state.goodReps += 1;
+  state.lastRepAt = Date.now();
+  state.lastFormWarning = "";
+  state.qualityScores.push(quality.qualityScore);
+  state.setQualityScores.push(quality.qualityScore);
+  if (state.currentSetReps >= REPS_PER_SET) recordCompletedSet();
+}
 
-  const shoulderCenter = (leftShoulder.x + rightShoulder.x) / 2;
-  if (state.torsoAnchorX === null) state.torsoAnchorX = shoulderCenter;
-  const torsoDrift = Math.abs(shoulderCenter - state.torsoAnchorX);
-  state.torsoAnchorX = state.torsoAnchorX * 0.96 + shoulderCenter * 0.04;
-  if (torsoDrift > 0.1) return "Mantén el torso quieto; no balancees el cuerpo.";
+function registerRejectedCurl(quality) {
+  state.attemptedReps += 1;
+  state.setAttemptedReps += 1;
+  state.rejectedReps += 1;
+  state.setRejectedReps += 1;
+  state.formWarnings += 1;
+  state.setWarnings += 1;
+  state.lastFormWarning = quality.message;
+  state.rejectionReasons[quality.reason] = (state.rejectionReasons[quality.reason] || 0) + 1;
+  state.qualityScores.push(quality.qualityScore);
+  state.setQualityScores.push(quality.qualityScore);
+}
 
-  const indexes = armLandmarks[arm];
-  const shoulder = landmarks[indexes.shoulder];
-  const elbow = landmarks[indexes.elbow];
-  if (shoulder && elbow && Math.abs(elbow.x - shoulder.x) > 0.24) {
-    return "Mantén el codo cerca del cuerpo y baja con control.";
-  }
-  return "";
+function announceRejectedCurl(quality) {
+  state.speechQueue = state.speechQueue.filter((item) => item.channel !== "coaching");
+  state.lastSpokenCue = quality.message;
+  state.lastCueAt = Date.now();
+  speak(quality.message, {
+    channel: "coaching",
+    priority: true,
+    dedupeKey: `rejected:${quality.reason}`,
+    pauseAfter: 100,
+    rate: 1.04,
+  });
 }
 
 function drawPose(landmarks, activeArm) {
@@ -1368,75 +1461,39 @@ function drawPoint(ctx, point, color, radius) {
   ctx.fill();
 }
 
-function countCurl(angle) {
-  const downAngle = 148;
-  const upAngle = 78;
-  const requiredStableFrames = 3;
-  const candidate = angle >= downAngle ? "down" : angle <= upAngle ? "up" : "middle";
-
-  if (candidate === "middle") {
-    state.phaseCandidate = "middle";
-    state.phaseCandidateFrames = 0;
-    return state.curlPhase === "down"
-      ? "Sube con el codo estable."
-      : "Baja controlado hasta extender el brazo.";
-  }
-
-  if (state.phaseCandidate === candidate) state.phaseCandidateFrames += 1;
-  else {
-    state.phaseCandidate = candidate;
-    state.phaseCandidateFrames = 1;
-  }
-
-  if (state.phaseCandidateFrames < requiredStableFrames) {
-    return candidate === "down" ? "Completa la extensión." : "Aprieta arriba sin balancearte.";
-  }
-
-  if (candidate === "down") {
-    if (state.curlPhase !== "down") state.curlPhase = "down";
-    return state.currentSetReps
-      ? "Extensión completa. Siguiente repetición."
-      : "Posición inicial lista. Sube controlado.";
-  }
-
-  if (state.curlPhase === "down" && Date.now() - state.lastRepAt >= 650) {
-    if (state.currentSetReps >= REPS_PER_SET) return "Objetivo de ocho repeticiones completo.";
-    state.totalReps += 1;
-    state.currentSetReps += 1;
-    state.lastRepAt = Date.now();
-    state.curlPhase = "up";
-    state.phaseCandidateFrames = 0;
-    if (state.currentSetReps >= REPS_PER_SET) {
-      recordCompletedSet();
-      return "Ocho repeticiones completas. Preparando tu dashboard.";
-    }
-    return `Repetición ${state.currentSetReps} registrada. Baja completo.`;
-  }
-
-  return "Arriba. Baja completo antes de la siguiente repetición.";
-}
-
 function handlePoseResult(result) {
   const landmarks = result.landmarks?.[0];
   if (!landmarks) {
+    state.curlQualityTracker?.markVisibilityLost();
     clearOverlay();
     updateLiveDashboard({
       angle: null,
-      coach: "No veo tu cuerpo completo. Aleja el telefono o mejora la luz.",
+      coach: "No veo tu cuerpo completo. Aléjate un poco o mejora la luz.",
       status: "buscando",
       statusVariant: "warning",
     });
     return;
   }
 
-  const arm = pickArm(landmarks);
+  if (!state.curlQualityTracker || !state.curlQualityModel) {
+    updateLiveDashboard({
+      angle: null,
+      coach: "El modelo de calidad todavía se está cargando.",
+      status: "cargando",
+      statusVariant: "warning",
+    });
+    return;
+  }
+
+  const arm = state.curlQualityTracker.activeArm || pickArm(landmarks);
   const score = armScore(landmarks, arm);
   drawPose(landmarks, arm);
 
   if (score < 0.45) {
+    state.curlQualityTracker.markVisibilityLost();
     updateLiveDashboard({
       angle: null,
-      coach: "No veo bien hombro, codo y muneca. Ajusta distancia o angulo.",
+      coach: "No veo bien hombro, codo y muñeca. Ajusta la distancia o el ángulo.",
       status: "ajusta",
       statusVariant: "warning",
     });
@@ -1448,7 +1505,7 @@ function handlePoseResult(result) {
   if (measuredAngle === null) {
     updateLiveDashboard({
       angle: null,
-      coach: "No puedo calcular el angulo del codo todavia.",
+      coach: "No puedo calcular el ángulo del codo todavía.",
       status: "ajusta",
       statusVariant: "warning",
     });
@@ -1458,6 +1515,16 @@ function handlePoseResult(result) {
     ? measuredAngle
     : state.smoothedAngle * 0.68 + measuredAngle * 0.32;
   const angle = state.smoothedAngle;
+
+  if (state.completionScheduled) {
+    updateLiveDashboard({
+      angle,
+      coach: "Ocho repeticiones válidas. Preparando tu dashboard.",
+      status: "completado",
+      statusVariant: "active",
+    });
+    return;
+  }
 
   if (!state.countingEnabled) {
     updateLiveDashboard({
@@ -1471,19 +1538,31 @@ function handlePoseResult(result) {
     return;
   }
 
-  const repsBefore = state.currentSetReps;
-  const coachFromAngle = countCurl(angle);
-  const warning = formWarning(landmarks, arm);
+  const sample = createCurlQualitySample(landmarks, arm, performance.now() / 1000, angle);
+  if (!sample || sample.visibility < state.curlQualityModel.counting.minimum_visibility) {
+    state.curlQualityTracker.markVisibilityLost();
+    updateLiveDashboard({
+      angle,
+      coach: "Necesito ver hombros, codo, muñeca y cadera durante toda la repetición.",
+      status: "ajusta encuadre",
+      statusVariant: "warning",
+    });
+    return;
+  }
+
   state.angleSamples.push(angle);
   state.setAngles.push(angle);
-  if (warning && warning !== state.lastFormWarning) {
-    state.formWarnings += 1;
-    state.setWarnings += 1;
-  }
-  state.lastFormWarning = warning;
-  const coach = warning || coachFromAngle;
-  if (state.currentSetReps > repsBefore) {
-    if (!warning) state.goodReps += 1;
+  const event = state.curlQualityTracker.update(sample);
+  let coach = event.message;
+  let status = event.type === "top" ? "validando" : "en vivo";
+  let statusVariant = "active";
+
+  if (event.type === "accepted") {
+    registerAcceptedCurl(event.quality);
+    coach = state.currentSetReps >= REPS_PER_SET
+      ? "Ocho repeticiones válidas. Preparando tu dashboard."
+      : `Repetición ${state.currentSetReps} válida. Sigue con el mismo control.`;
+    status = "repetición válida";
     if (canFinishWorkout() && !state.completionScheduled) {
       state.completionScheduled = true;
       let completionStarted = false;
@@ -1499,16 +1578,19 @@ function handlePoseResult(result) {
     } else {
       announceRep();
     }
-  } else if (warning) {
-    speakFormCue(warning);
-  } else if (state.currentSetReps === 0) {
-    speakFormCue(coachFromAngle);
+  } else if (event.type === "rejected") {
+    registerRejectedCurl(event.quality);
+    coach = event.quality.message;
+    status = "intento no contado";
+    statusVariant = "warning";
+    announceRejectedCurl(event.quality);
   }
+
   updateLiveDashboard({
     angle,
     coach,
-    status: "en vivo",
-    statusVariant: "active",
+    status,
+    statusVariant,
   });
 }
 
@@ -1585,9 +1667,13 @@ async function startRecording() {
   state.setStartedAt = Date.now();
   state.setAngles = [];
   state.setWarnings = 0;
+  state.setAttemptedReps = 0;
+  state.setRejectedReps = 0;
+  state.setQualityScores = [];
   state.lastSpokenRep = 0;
   state.curlPhase = "unknown";
   state.torsoAnchorX = null;
+  state.curlQualityTracker?.reset();
   if (!state.stream) {
     await startCamera();
   }
@@ -1647,6 +1733,11 @@ function makeDownloads() {
     source: "iphone_safari_camera",
     training_intent: "unreviewed",
     use_for_training: false,
+    accepted_reps: state.currentSetReps,
+    attempted_reps: state.setAttemptedReps,
+    rejected_reps: state.setRejectedReps,
+    rejection_reasons: state.rejectionReasons,
+    quality_model_id: state.curlQualityModel?.model_id || "curl-quality-v1",
     video_file: `video.${extension}`,
     video_mime_type: mimeType,
   };
@@ -1810,6 +1901,13 @@ function prepareNewSession(plan = null) {
   state.workoutCompleted = false;
   state.formWarnings = 0;
   state.goodReps = 0;
+  state.attemptedReps = 0;
+  state.rejectedReps = 0;
+  state.setAttemptedReps = 0;
+  state.setRejectedReps = 0;
+  state.rejectionReasons = {};
+  state.qualityScores = [];
+  state.setQualityScores = [];
   state.angleSamples = [];
   state.setHistory = [];
   state.completionScheduled = false;

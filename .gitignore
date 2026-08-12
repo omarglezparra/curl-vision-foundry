@@ -3,5 +3,12 @@ __pycache__/
 *.pyc
 .env
 outputs/
+test-results/
 mlruns/
+training-videos/**/*.mp4
+training-videos/**/*.mov
+training-videos/**/*.m4v
+training-videos/**/*.webm
+training-videos/**/_preview_frames/
+training-videos/**/*-preview.jpg
 .azure/
