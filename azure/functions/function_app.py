@@ -25,6 +25,7 @@ app = func.FunctionApp()
 
 
 MINIAPP_PROFILE_ID_PATTERN = re.compile(r"^mp_[a-f0-9]{24}$")
+WEB_PROFILE_ID_PATTERN = re.compile(r"^web_[a-f0-9]{32}$")
 PROFILE_DATASET_BLOBS = (
     "datasets/cloud_capture_summary.csv",
     "datasets/cloud_curl_dataset.csv",
@@ -510,6 +511,11 @@ def is_miniapp_profile_id(value: object) -> bool:
     return bool(MINIAPP_PROFILE_ID_PATTERN.fullmatch(str(value or "").strip()))
 
 
+def is_web_profile_id(value: object) -> bool:
+    """Return whether a value is a high-entropy pseudonymous web profile ID."""
+    return bool(WEB_PROFILE_ID_PATTERN.fullmatch(str(value or "").strip()))
+
+
 def is_ingest_profile_id(value: object) -> bool:
     """Allow the fixed direct-companion owner or a pseudonymous MiniApp profile."""
     profile_id = str(value or "").strip()
@@ -647,6 +653,40 @@ def _blob_names(
         return [str(blob.name) for blob in blobs]
     except ResourceNotFoundError:
         return []
+
+
+def load_web_workout_history(
+    service: BlobServiceClient,
+    container: str,
+    profile_id: str,
+    limit: int = 100,
+) -> list[dict[str, object]]:
+    """Load newest web workout statistics belonging to one pseudonymous profile."""
+    if not is_web_profile_id(profile_id):
+        raise ValueError("profile_id must be a valid web profile identifier.")
+    safe_limit = max(1, min(int(limit), 100))
+    prefix = f"profiles/{profile_id}/workout-summaries/"
+    sessions: list[dict[str, object]] = []
+    for blob_name in _blob_names(service, container, prefix):
+        if not blob_name.endswith("/workout-summary.json"):
+            continue
+        try:
+            raw = service.get_blob_client(container, blob_name).download_blob().readall()
+            document = json.loads(raw.decode("utf-8-sig") if isinstance(raw, bytes) else str(raw))
+        except (ResourceNotFoundError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(document, dict) or document.get("profile_id") != profile_id:
+            continue
+        statistics = document.get("statistics")
+        if not isinstance(statistics, dict):
+            continue
+        summary = dict(statistics)
+        next_session = document.get("next_session")
+        if isinstance(next_session, dict) and "nextSessionPlan" not in summary:
+            summary["nextSessionPlan"] = next_session
+        sessions.append(summary)
+    sessions.sort(key=lambda item: str(item.get("completedAt") or ""), reverse=True)
+    return sessions[:safe_limit]
 
 
 def _json_blob_matches_profile(
@@ -797,11 +837,18 @@ def create_summary_upload(req: func.HttpRequest) -> func.HttpResponse:
     try:
         body = req.get_json()
         session_id = safe_segment(body["session_id"], "session")[:128]
-    except (KeyError, ValueError, TypeError) as exc:
+        profile_id = str(body.get("profile_id") or "").strip()
+        if profile_id and not is_web_profile_id(profile_id):
+            raise ValueError("profile_id must be a valid web profile identifier.")
+    except (AttributeError, KeyError, ValueError, TypeError) as exc:
         return json_response({"error": f"Invalid request body: {exc}"}, status_code=400, origin=origin)
 
     container = setting("PROCESSED_CONTAINER", "processed")
-    blob_name = f"sessions/{session_id}/workout-summary.json"
+    blob_name = (
+        f"profiles/{profile_id}/workout-summaries/{session_id}/workout-summary.json"
+        if profile_id
+        else f"sessions/{session_id}/workout-summary.json"
+    )
     upload = create_upload_blob(container, blob_name, "application/json")
     return json_response(
         {
@@ -812,6 +859,41 @@ def create_summary_upload(req: func.HttpRequest) -> func.HttpResponse:
             "expiresAt": upload["expiresAt"],
         },
         origin=origin,
+    )
+
+
+@app.route(route="workout-history", methods=["POST", "OPTIONS"], auth_level=func.AuthLevel.ANONYMOUS)
+def workout_history(req: func.HttpRequest) -> func.HttpResponse:
+    """Return cloud summaries scoped to one unguessable pseudonymous web profile."""
+    origin = req.headers.get("Origin")
+    if req.method == "OPTIONS":
+        return func.HttpResponse(status_code=204, headers=cors_headers(origin))
+    try:
+        body = req.get_json()
+        profile_id = str(body.get("profile_id") or "").strip()
+        if not is_web_profile_id(profile_id):
+            raise ValueError("profile_id must be a valid web profile identifier.")
+        limit = int(body.get("limit") or 100)
+        if limit < 1 or limit > 100:
+            raise ValueError("limit must be an integer from 1 to 100.")
+    except (AttributeError, ValueError, TypeError) as exc:
+        return json_response({"error": f"Invalid request body: {exc}"}, status_code=400, origin=origin)
+
+    sessions = load_web_workout_history(
+        blob_service(),
+        setting("PROCESSED_CONTAINER", "processed"),
+        profile_id,
+        limit,
+    )
+    return json_response(
+        {
+            "status": "ready",
+            "profileId": profile_id,
+            "sessions": sessions,
+            "count": len(sessions),
+        },
+        origin=origin,
+        extra_headers={"Cache-Control": "no-store"},
     )
 
 

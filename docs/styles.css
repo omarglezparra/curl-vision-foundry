@@ -165,6 +165,8 @@ h1 {
   border-radius: 14px;
   background: rgba(8, 14, 17, 0.66);
   backdrop-filter: blur(12px);
+  max-height: 132px;
+  overflow-y: auto;
 }
 
 .live-status {
@@ -199,7 +201,7 @@ h1 {
 
 .camera-footer {
   right: 18px;
-  bottom: calc(154px + env(safe-area-inset-bottom));
+  bottom: calc(198px + env(safe-area-inset-bottom));
   left: 18px;
   display: flex;
   align-items: flex-end;
@@ -247,7 +249,7 @@ h1 {
 .workflow-steps {
   position: absolute;
   z-index: 3;
-  top: max(170px, calc(env(safe-area-inset-top) + 154px));
+  top: max(238px, calc(env(safe-area-inset-top) + 222px));
   left: 18px;
   display: flex;
   gap: 6px;
@@ -358,6 +360,8 @@ h1 {
 }
 
 .dashboard-header,
+.dashboard-tabs,
+.dashboard-page,
 .dashboard-columns,
 .dashboard-metrics,
 .dashboard-history-card,
@@ -373,6 +377,54 @@ h1 {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 20px;
+}
+
+.dashboard-tabs {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 7px;
+  overflow-x: auto;
+  border: 1px solid rgba(167, 243, 208, 0.15);
+  border-radius: 14px;
+  background: rgba(5, 10, 11, 0.88);
+  backdrop-filter: blur(18px);
+  scrollbar-width: none;
+}
+
+.dashboard-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard-tab {
+  min-height: 38px;
+  flex: 1 0 auto;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #91a9a3;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.dashboard-tab.active {
+  background: #15805f;
+  color: #ffffff;
+  box-shadow: 0 8px 22px rgba(21, 128, 95, 0.24);
+}
+
+.dashboard-page {
+  animation: dashboard-page-in 180ms ease-out;
+}
+
+@keyframes dashboard-page-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .dashboard-actions {
@@ -524,6 +576,11 @@ h1 {
 
 .dashboard-history-card {
   margin-bottom: 10px;
+}
+
+.history-list {
+  max-height: 56vh;
+  overflow-y: auto;
 }
 
 .progress-card,
@@ -739,6 +796,224 @@ h1 {
   color: #a7f3d0;
 }
 
+.body-map-card,
+.nutrition-card {
+  margin-bottom: 10px;
+}
+
+.body-map-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.35fr) minmax(230px, 0.65fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.body-map {
+  width: 100%;
+  max-height: 510px;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 28% 35%, rgba(56, 203, 151, 0.1), transparent 34%),
+    radial-gradient(circle at 74% 35%, rgba(56, 203, 151, 0.1), transparent 34%),
+    rgba(4, 13, 13, 0.72);
+}
+
+.body-map-title {
+  fill: #8fa6a1;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.body-shape {
+  fill: #243532;
+  stroke: #49635e;
+  stroke-width: 2;
+}
+
+.body-limb {
+  fill: none;
+  stroke: #2d413d;
+  stroke-linecap: round;
+  stroke-width: 29;
+}
+
+.muscle-primary {
+  fill: #35e7a3;
+  stroke: #9dffdb;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 9px rgba(53, 231, 163, 0.72));
+}
+
+.muscle-secondary {
+  fill: #37a9e8;
+  stroke: #9bddff;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 7px rgba(55, 169, 232, 0.52));
+}
+
+.muscle-stabilizer {
+  fill: #efb84e;
+  stroke: #ffe2a2;
+  stroke-width: 2;
+  opacity: 0.82;
+}
+
+.body-map-details,
+.muscle-list {
+  display: grid;
+  gap: 9px;
+}
+
+.muscle-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding-bottom: 10px;
+  color: #9fb2ae;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.muscle-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.muscle-legend i,
+.muscle-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+}
+
+.legend-primary,
+.muscle-dot.primary { background: #35e7a3; }
+.legend-secondary,
+.muscle-dot.secondary { background: #37a9e8; }
+.legend-stabilizer,
+.muscle-dot.stabilizer { background: #efb84e; }
+
+.muscle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.muscle-row strong,
+.muscle-row small {
+  display: block;
+}
+
+.muscle-row strong {
+  color: #f4fbf8;
+  font-size: 12px;
+}
+
+.muscle-row small {
+  margin-top: 2px;
+  color: #8fa6a1;
+  font-size: 10px;
+}
+
+.body-history-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.body-history-stats div {
+  padding: 9px;
+  border: 1px solid rgba(167, 243, 208, 0.12);
+  border-radius: 10px;
+  background: rgba(9, 26, 23, 0.82);
+}
+
+.body-history-stats span,
+.body-history-stats strong {
+  display: block;
+}
+
+.body-history-stats span {
+  min-height: 24px;
+  color: #8fa6a1;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.body-history-stats strong {
+  margin-top: 4px;
+  color: #a7f3d0;
+  font-size: 15px;
+}
+
+.nutrition-plan {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.nutrition-item {
+  padding: 13px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.nutrition-item > span {
+  display: block;
+  color: #63d5a7;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.nutrition-item strong {
+  display: block;
+  margin-top: 5px;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.nutrition-item p,
+.health-note {
+  margin: 5px 0 0;
+  color: #a9bbb7;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.health-note {
+  margin-top: 12px;
+  padding: 10px;
+  border-left: 3px solid #efb84e;
+  background: rgba(239, 184, 78, 0.07);
+}
+
+.evidence-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.evidence-links a {
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: rgba(167, 243, 208, 0.09);
+  color: #a7f3d0;
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .dashboard-new-session {
   display: block;
   width: min(100%, 360px);
@@ -798,6 +1073,15 @@ h1 {
 
   .recovery-plan {
     grid-template-columns: 1fr;
+  }
+
+  .body-map-layout,
+  .nutrition-plan {
+    grid-template-columns: 1fr;
+  }
+
+  .body-map {
+    max-height: 420px;
   }
 
   .dashboard-actions {

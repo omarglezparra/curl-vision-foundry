@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <title>Javier AI Coach</title>
-    <link rel="stylesheet" href="./styles.css?v=20260812-pose-after-countdown" />
+    <link rel="stylesheet" href="./styles.css?v=20260812-fluid-history-v11" />
   </head>
   <body>
     <main class="camera-app">
@@ -55,6 +55,7 @@
           <button id="record" class="control-button control-record" type="button">Grabar set</button>
           <button id="voice-toggle" class="control-button" type="button">Voz ON</button>
           <button id="switch-camera" class="control-button" type="button">Cambiar cámara</button>
+          <button id="dashboard-open-history" class="control-button" type="button">Mi progreso</button>
           <button id="new-session" class="control-button" type="button">Nueva sesión</button>
           <button id="live-reset" class="control-button control-small" type="button">Reiniciar set</button>
           <button id="finish-workout" class="control-button control-finish control-small" type="button" disabled>Finalizar entrenamiento</button>
@@ -71,7 +72,7 @@
         <div class="dashboard-header">
           <div>
             <p class="brand">JAVIER AI · RESUMEN</p>
-            <h2>Entrenamiento completado</h2>
+            <h2 id="dashboard-title">Entrenamiento completado</h2>
             <p id="dashboard-subtitle">Tu siguiente rutina de brazo ya está preparada.</p>
           </div>
           <div class="dashboard-actions">
@@ -79,40 +80,117 @@
             <button id="dashboard-close" class="dashboard-close" type="button" aria-label="Cerrar dashboard">×</button>
           </div>
         </div>
-        <div id="dashboard-metrics" class="dashboard-metrics"></div>
-        <div class="dashboard-card progress-card">
-          <div class="card-heading">
-            <div><h3>Tu progreso</h3><p class="card-caption">Cada sesión queda registrada para comparar técnica y volumen.</p></div>
-            <span id="progress-period" class="status-pill">Últimas sesiones</span>
+
+        <nav class="dashboard-tabs" role="tablist" aria-label="Secciones del dashboard">
+          <button class="dashboard-tab active" type="button" role="tab" aria-selected="true" data-dashboard-page="summary">Resumen</button>
+          <button class="dashboard-tab" type="button" role="tab" aria-selected="false" data-dashboard-page="progress">Progreso</button>
+          <button class="dashboard-tab" type="button" role="tab" aria-selected="false" data-dashboard-page="body">Cuerpo</button>
+          <button class="dashboard-tab" type="button" role="tab" aria-selected="false" data-dashboard-page="recovery">Recuperación</button>
+        </nav>
+
+        <section id="dashboard-page-summary" class="dashboard-page" data-dashboard-view="summary">
+          <div id="dashboard-metrics" class="dashboard-metrics"></div>
+          <div id="dashboard-save-log" class="save-log" aria-live="polite"></div>
+          <div class="dashboard-columns">
+            <div class="dashboard-card">
+              <div class="card-heading"><h3>Detalle de la sesión</h3><span id="dashboard-session-status" class="status-pill">8/8 reps</span></div>
+              <div id="dashboard-set-list" class="set-list"></div>
+            </div>
+            <div class="dashboard-card">
+              <div class="card-heading"><div><h3>Siguiente sesión con IA</h3><p id="next-session-date" class="card-caption"></p></div><span class="status-pill ready">Cargada</span></div>
+              <p id="next-session-goal" class="next-session-goal"></p>
+              <div id="next-routine" class="routine-list"></div>
+              <p id="next-session-note" class="next-session-note"></p>
+            </div>
           </div>
-          <div class="progress-overview">
-            <div class="progress-score"><strong id="progress-score">0%</strong><span>técnica media</span></div>
-            <div id="progress-highlights" class="progress-highlights"></div>
-            <div id="progress-chart" class="progress-chart" aria-label="Gráfica de progreso"></div>
+          <button id="dashboard-new-session" class="control-button control-primary dashboard-new-session" type="button">Empezar sesión 2</button>
+        </section>
+
+        <section id="dashboard-page-progress" class="dashboard-page" data-dashboard-view="progress" hidden>
+          <div class="dashboard-card progress-card">
+            <div class="card-heading">
+              <div><h3>Tu progreso histórico</h3><p class="card-caption">Compara técnica, volumen y constancia entre sesiones.</p></div>
+              <span id="progress-period" class="status-pill">Últimas sesiones</span>
+            </div>
+            <div class="progress-overview">
+              <div class="progress-score"><strong id="progress-score">0%</strong><span>técnica media</span></div>
+              <div id="progress-highlights" class="progress-highlights"></div>
+              <div id="progress-chart" class="progress-chart" aria-label="Gráfica de progreso"></div>
+            </div>
           </div>
-        </div>
-        <div id="dashboard-save-log" class="save-log" aria-live="polite"></div>
-        <div class="dashboard-columns">
-          <div class="dashboard-card">
-            <div class="card-heading"><h3>Detalle de la sesión</h3><span id="dashboard-session-status" class="status-pill">8/8 reps</span></div>
-            <div id="dashboard-set-list" class="set-list"></div>
+          <div class="dashboard-card dashboard-history-card">
+            <div class="card-heading"><h3>Todas tus sesiones</h3><span id="dashboard-history-count" class="muted-label"></span></div>
+            <div id="dashboard-history" class="history-list"></div>
           </div>
-          <div class="dashboard-card">
-            <div class="card-heading"><div><h3>Siguiente sesión con IA</h3><p id="next-session-date" class="card-caption"></p></div><span class="status-pill ready">Cargada</span></div>
-            <p id="next-session-goal" class="next-session-goal"></p>
-            <div id="next-routine" class="routine-list"></div>
-            <p id="next-session-note" class="next-session-note"></p>
+        </section>
+
+        <section id="dashboard-page-body" class="dashboard-page" data-dashboard-view="body" hidden>
+          <div class="dashboard-card body-map-card">
+            <div class="card-heading">
+              <div><h3>Mapa de músculos trabajados</h3><p class="card-caption">Estimación basada en los ejercicios registrados; no es una medición médica.</p></div>
+              <span id="body-session-label" class="status-pill ready">Sesión actual</span>
+            </div>
+            <div class="body-map-layout">
+              <svg class="body-map" viewBox="0 0 520 660" role="img" aria-label="Vista frontal y posterior con bíceps y antebrazos resaltados">
+                <g transform="translate(35 28)">
+                  <text class="body-map-title" x="95" y="0" text-anchor="middle">Frente</text>
+                  <circle class="body-shape" cx="95" cy="55" r="34" />
+                  <path class="body-shape" d="M58 95 Q95 76 132 95 L145 253 Q95 282 45 253 Z" />
+                  <path class="body-limb" d="M53 112 Q25 175 18 258" />
+                  <path class="body-limb" d="M137 112 Q165 175 172 258" />
+                  <path class="body-limb" d="M72 258 Q62 360 53 474" />
+                  <path class="body-limb" d="M118 258 Q128 360 137 474" />
+                  <ellipse class="muscle-primary" cx="35" cy="165" rx="17" ry="39" transform="rotate(18 35 165)" />
+                  <ellipse class="muscle-primary" cx="155" cy="165" rx="17" ry="39" transform="rotate(-18 155 165)" />
+                  <path class="muscle-secondary" d="M22 204 Q7 236 14 274 Q29 260 37 217 Z" />
+                  <path class="muscle-secondary" d="M168 204 Q183 236 176 274 Q161 260 153 217 Z" />
+                  <ellipse class="muscle-stabilizer" cx="52" cy="111" rx="21" ry="15" transform="rotate(-28 52 111)" />
+                  <ellipse class="muscle-stabilizer" cx="138" cy="111" rx="21" ry="15" transform="rotate(28 138 111)" />
+                </g>
+                <g transform="translate(295 28)">
+                  <text class="body-map-title" x="95" y="0" text-anchor="middle">Espalda</text>
+                  <circle class="body-shape" cx="95" cy="55" r="34" />
+                  <path class="body-shape" d="M58 95 Q95 76 132 95 L145 253 Q95 282 45 253 Z" />
+                  <path class="body-limb" d="M53 112 Q25 175 18 258" />
+                  <path class="body-limb" d="M137 112 Q165 175 172 258" />
+                  <path class="body-limb" d="M72 258 Q62 360 53 474" />
+                  <path class="body-limb" d="M118 258 Q128 360 137 474" />
+                  <ellipse class="muscle-primary" cx="35" cy="165" rx="16" ry="37" transform="rotate(18 35 165)" />
+                  <ellipse class="muscle-primary" cx="155" cy="165" rx="16" ry="37" transform="rotate(-18 155 165)" />
+                  <path class="muscle-secondary" d="M22 204 Q7 236 14 274 Q29 260 37 217 Z" />
+                  <path class="muscle-secondary" d="M168 204 Q183 236 176 274 Q161 260 153 217 Z" />
+                  <path class="muscle-stabilizer" d="M58 101 Q95 126 132 101 L125 161 Q95 146 65 161 Z" />
+                </g>
+              </svg>
+              <div class="body-map-details">
+                <div class="muscle-legend" aria-label="Leyenda del mapa corporal">
+                  <span><i class="legend-primary"></i>Principal</span>
+                  <span><i class="legend-secondary"></i>Secundario</span>
+                  <span><i class="legend-stabilizer"></i>Estabilizador</span>
+                </div>
+                <div id="body-muscle-list" class="muscle-list"></div>
+                <div id="body-history-stats" class="body-history-stats"></div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="dashboard-card dashboard-history-card">
-          <div class="card-heading"><h3>Historial reciente</h3><span id="dashboard-history-count" class="muted-label"></span></div>
-          <div id="dashboard-history" class="history-list"></div>
-        </div>
-        <div class="dashboard-card recovery-card">
-          <div class="card-heading"><h3>Recuperación para mañana</h3><span class="status-pill ready">Plan listo</span></div>
-          <div id="recovery-plan" class="recovery-plan"></div>
-        </div>
-        <button id="dashboard-new-session" class="control-button control-primary dashboard-new-session" type="button">Preparar siguiente sesión</button>
+        </section>
+
+        <section id="dashboard-page-recovery" class="dashboard-page" data-dashboard-view="recovery" hidden>
+          <div class="dashboard-card recovery-card">
+            <div class="card-heading"><div><h3>Plan de descanso</h3><p class="card-caption">Ajustado a tu siguiente sesión de brazo.</p></div><span class="status-pill ready">Plan listo</span></div>
+            <div id="recovery-plan" class="recovery-plan"></div>
+          </div>
+          <div class="dashboard-card nutrition-card">
+            <div class="card-heading"><div><h3>Plan de alimentación</h3><p class="card-caption">Guía general para recuperación y aumento de masa muscular.</p></div><span class="status-pill">Sin contar calorías</span></div>
+            <div id="nutrition-plan" class="nutrition-plan"></div>
+            <p class="health-note">Adáptalo a tus alergias, condiciones médicas y necesidades energéticas. Si tienes dolor agudo, mareo o una condición clínica, detén el entrenamiento y consulta a un profesional.</p>
+            <div class="evidence-links">
+              <a href="https://jissn.biomedcentral.com/articles/10.1186/s12970-017-0177-8" target="_blank" rel="noreferrer">Proteína y ejercicio · ISSN</a>
+              <a href="https://www.cdc.gov/sleep/data-research/facts-stats/adults-sleep-facts-and-stats.html" target="_blank" rel="noreferrer">Sueño adulto · CDC</a>
+              <a href="https://www.myplate.gov/web/web/eat-healthy/protein-foods" target="_blank" rel="noreferrer">Alimentos con proteína · MyPlate</a>
+            </div>
+          </div>
+        </section>
       </section>
 
       <!-- Elements kept for the existing capture/upload contract; they are not shown in camera mode. -->
@@ -135,7 +213,7 @@
         </div>
       </section>
     </main>
-    <script src="./config.js?v=20260812-pose-after-countdown"></script>
-    <script type="module" src="./app.js?v=20260812-pose-after-countdown"></script>
+    <script src="./config.js?v=20260812-fluid-history-v11"></script>
+    <script type="module" src="./app.js?v=20260812-fluid-history-v11"></script>
   </body>
 </html>

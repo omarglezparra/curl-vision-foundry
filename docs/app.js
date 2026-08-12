@@ -19,11 +19,31 @@ const drills = [
 const WORKOUT_SETS = 1;
 const REPS_PER_SET = 8;
 const WORKOUT_HISTORY_KEY = "curlVisionWorkoutHistory";
+const NEXT_SESSION_PLAN_KEY = "curlVisionNextSessionPlan";
+const PROFILE_ID_KEY = "curlVisionProfileId";
+const MAX_HISTORY_SESSIONS = 100;
 const recoveryPlan = [
-  { title: "Descanso", text: "Deja 24–48 h antes de volver a entrenar bíceps. Entre ejercicios: 60–90 s." },
-  { title: "Comida", text: "Incluye proteína, carbohidrato, fruta o verdura y agua: huevos, pollo, yogur, arroz, avena o legumbres." },
-  { title: "Mañana", text: "Haz movilidad suave de hombros y entrena solo si no hay dolor agudo, mareo o fatiga anormal." },
+  { title: "Esta noche", text: "Busca al menos 7 horas de sueño y mantén un horario regular para favorecer la recuperación." },
+  { title: "Antes de repetir bíceps", text: "Deja 24–48 h y empieza la sesión siguiente solo si el brazo se siente recuperado y no hay dolor agudo." },
+  { title: "Durante la sesión 2", text: "Descansa 90–120 s entre series; conserva 1–2 repeticiones en reserva y detente al perder la técnica." },
 ];
+const nutritionPlan = [
+  { time: "Después de entrenar", meal: "Proteína + carbohidrato", example: "Yogur con avena y fruta, o pollo/tofu con arroz y verduras." },
+  { time: "Comidas principales", meal: "20–40 g de proteína por comida", example: "Alterna huevos, lácteos, pescado, pollo, legumbres, tofu, nueces y semillas." },
+  { time: "Antes de la sesión 2", meal: "Energía fácil de digerir", example: "1–3 h antes: avena con fruta y yogur, o arroz con una fuente de proteína." },
+  { time: "Todo el día", meal: "Agua y alimentos variados", example: "Bebe con regularidad y combina fruta, verdura, granos, proteína y lácteos o soya fortificada." },
+];
+const trainedMuscles = [
+  { name: "Bíceps braquial", role: "Principal", level: "primary" },
+  { name: "Braquial", role: "Secundario", level: "secondary" },
+  { name: "Braquiorradial y antebrazo", role: "Secundario", level: "secondary" },
+  { name: "Deltoide anterior y core", role: "Estabilizador", level: "stabilizer" },
+];
+
+const initialWorkoutHistory = loadWorkoutHistory();
+const initialSessionPlan = loadNextSessionPlan()
+  || defaultSessionPlan(highestSessionNumber(initialWorkoutHistory) + 1);
+const initialWorkoutId = loadActiveWorkoutId(initialWorkoutHistory);
 
 const state = {
   selectedIndex: 0,
@@ -36,7 +56,7 @@ const state = {
   recordingStartedAt: null,
   startedAt: 0,
   timerInterval: 0,
-  workoutId: loadWorkoutId(),
+  workoutId: initialWorkoutId,
   clipCount: 0,
   azureUploadCount: 0,
   poseLandmarker: null,
@@ -71,18 +91,33 @@ const state = {
   lastFormWarning: "",
   angleSamples: [],
   setHistory: [],
-  workoutHistory: loadWorkoutHistory(),
+  workoutHistory: initialWorkoutHistory,
+  profileId: loadProfileId(),
+  sessionNumber: initialSessionPlan.sessionNumber,
+  activeSessionPlan: initialSessionPlan,
+  nextSessionPlan: null,
   completionScheduled: false,
   sessionIntroSpoken: false,
   countingEnabled: false,
   countdownActive: false,
   speechRunId: 0,
+  speechQueue: [],
+  speechActive: false,
+  speechGeneration: 0,
+  speechWatchdog: 0,
+  activeUtterance: null,
+  activeSpeechItem: null,
   briefingFinished: false,
   briefingMinimumUntil: 0,
   countdownTimer: 0,
   voicePhase: "idle",
   trackingStarted: false,
   autoRecordAfterCountdown: true,
+  smoothedAngle: null,
+  phaseCandidate: "unknown",
+  phaseCandidateFrames: 0,
+  lastRepAt: 0,
+  currentDashboardSummary: null,
 };
 
 const els = {
@@ -110,6 +145,7 @@ const els = {
   azureSas: document.getElementById("azure-sas"),
   saveAzure: document.getElementById("save-azure"),
   newSession: document.getElementById("new-session"),
+  dashboardOpenHistory: document.getElementById("dashboard-open-history"),
   cameraStart: document.getElementById("camera-start"),
   liveStatus: document.getElementById("live-status"),
   liveReps: document.getElementById("live-reps"),
@@ -128,6 +164,7 @@ const els = {
   resultsDashboard: document.getElementById("results-dashboard"),
   dashboardClose: document.getElementById("dashboard-close"),
   dashboardMetrics: document.getElementById("dashboard-metrics"),
+  dashboardTitle: document.getElementById("dashboard-title"),
   dashboardSubtitle: document.getElementById("dashboard-subtitle"),
   dashboardSessionStatus: document.getElementById("dashboard-session-status"),
   dashboardSetList: document.getElementById("dashboard-set-list"),
@@ -145,6 +182,12 @@ const els = {
   nextSessionDate: document.getElementById("next-session-date"),
   nextSessionGoal: document.getElementById("next-session-goal"),
   nextSessionNote: document.getElementById("next-session-note"),
+  dashboardTabs: Array.from(document.querySelectorAll("[data-dashboard-page]")),
+  dashboardPages: Array.from(document.querySelectorAll("[data-dashboard-view]")),
+  bodySessionLabel: document.getElementById("body-session-label"),
+  bodyMuscleList: document.getElementById("body-muscle-list"),
+  bodyHistoryStats: document.getElementById("body-history-stats"),
+  nutritionPlan: document.getElementById("nutrition-plan"),
 };
 
 const poseModelUrl =
@@ -171,12 +214,23 @@ function workoutStamp(date = new Date()) {
 }
 
 function createWorkoutId() {
-  return `gym_good_${workoutStamp()}`;
+  const suffix = window.crypto?.randomUUID
+    ? window.crypto.randomUUID().split("-")[0]
+    : Math.random().toString(16).slice(2, 10);
+  return `gym_good_${workoutStamp()}_${suffix}`;
 }
 
 function loadWorkoutId() {
   const stored = localStorage.getItem("curlVisionWorkoutId");
   if (stored) return stored;
+  const created = createWorkoutId();
+  localStorage.setItem("curlVisionWorkoutId", created);
+  return created;
+}
+
+function loadActiveWorkoutId(history) {
+  const stored = loadWorkoutId();
+  if (!history.some((item) => item?.id === stored)) return stored;
   const created = createWorkoutId();
   localStorage.setItem("curlVisionWorkoutId", created);
   return created;
@@ -193,10 +247,70 @@ function sessionId() {
 function loadWorkoutHistory() {
   try {
     const stored = JSON.parse(localStorage.getItem(WORKOUT_HISTORY_KEY) || "[]");
-    return Array.isArray(stored) ? stored : [];
+    return Array.isArray(stored) ? stored.slice(0, MAX_HISTORY_SESSIONS) : [];
   } catch (error) {
     return [];
   }
+}
+
+function loadNextSessionPlan() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(NEXT_SESSION_PLAN_KEY) || "null");
+    return stored && Array.isArray(stored.exercises) ? stored : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function loadProfileId() {
+  const stored = localStorage.getItem(PROFILE_ID_KEY) || "";
+  if (/^web_[a-f0-9]{32}$/.test(stored)) return stored;
+  const bytes = new Uint8Array(16);
+  if (window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  const created = `web_${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+  localStorage.setItem(PROFILE_ID_KEY, created);
+  return created;
+}
+
+function highestSessionNumber(history) {
+  const explicit = history.reduce((highest, item) => Math.max(highest, Number(item.sessionNumber) || 0), 0);
+  return Math.max(explicit, history.length);
+}
+
+function defaultSessionPlan(sessionNumber = 1) {
+  return {
+    sessionNumber,
+    focus: "Bíceps y control técnico",
+    guidedExercise: "Curl estricto",
+    guidedReps: REPS_PER_SET,
+    goal: "Establecer una base limpia: ocho repeticiones controladas sin balancear el torso.",
+    exercises: [
+      { name: "Curl estricto", detail: "Bloque IA · 8 reps · 90 s", cue: "RIR 2" },
+      { name: "Curl martillo", detail: "2 series · 10 reps · 90 s", cue: "Muñeca neutra" },
+      { name: "Extensión de tríceps", detail: "2 series · 10 reps · 90 s", cue: "Sin impulso" },
+    ],
+    note: "Javier medirá primero el bloque de curl. Detén cualquier ejercicio si aparece dolor agudo o si pierdes el control.",
+  };
+}
+
+function mergeWorkoutHistories(...historyGroups) {
+  const byId = new Map();
+  historyGroups.flat().forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const summary = item.statistics && typeof item.statistics === "object" ? item.statistics : item;
+    const id = String(summary.id || summary.session_id || "").trim();
+    if (!id) return;
+    byId.set(id, { ...byId.get(id), ...summary, id });
+  });
+  return Array.from(byId.values())
+    .sort((left, right) => new Date(right.completedAt || 0) - new Date(left.completedAt || 0))
+    .slice(0, MAX_HISTORY_SESSIONS);
 }
 
 function canFinishWorkout() {
@@ -235,14 +349,19 @@ function nextSessionDate(value) {
 }
 
 function historyFor(summary) {
-  return [summary, ...state.workoutHistory.filter((item) => item.id !== summary.id)].slice(0, 8);
+  return mergeWorkoutHistories([summary], state.workoutHistory);
 }
 
 function buildNextSession(summary, history) {
   const techniqueReady = summary.formScore >= 88 && summary.warnings <= 1;
   const recentAverage = Math.round(average(history.map((item) => Number(item.formScore) || 0)));
+  const sessionNumber = Math.max(Number(summary.sessionNumber) || 0, highestSessionNumber(history)) + 1;
   if (techniqueReady) {
     return {
+      sessionNumber,
+      focus: "Bíceps y brazo · hipertrofia controlada",
+      guidedExercise: "Curl estricto",
+      guidedReps: REPS_PER_SET,
       goal: "Hipertrofia con progresión controlada · termina la última serie cerca del fallo técnico.",
       exercises: [
         { name: "Curl estricto", detail: "3 series · 8–12 reps · 90 s", cue: "RIR 1–2" },
@@ -254,6 +373,10 @@ function buildNextSession(summary, history) {
     };
   }
   return {
+    sessionNumber,
+    focus: "Bíceps y brazo · consolidación técnica",
+    guidedExercise: "Curl estricto",
+    guidedReps: REPS_PER_SET,
     goal: "Consolidar técnica antes de subir carga · no busques el fallo mientras haya avisos de postura.",
     exercises: [
       { name: "Curl estricto", detail: "3 series · 8–10 reps · 120 s", cue: "RIR 2–3" },
@@ -269,13 +392,14 @@ function renderProgress(summary, history) {
   const avgForm = Math.round(average(history.map((item) => Number(item.formScore) || 0)));
   const totalReps = history.reduce((sum, item) => sum + (Number(item.reps) || 0), 0);
   const bestForm = Math.max(...history.map((item) => Number(item.formScore) || 0), 0);
-  const lastItems = history.slice(0, 6).reverse();
+  const totalMinutes = Math.round(history.reduce((sum, item) => sum + (Number(item.durationSeconds) || 0), 0) / 60);
+  const lastItems = history.slice(0, 10).reverse();
   els.progressScore.textContent = `${avgForm}%`;
   els.progressPeriod.textContent = `${history.length} ${history.length === 1 ? "sesión" : "sesiones"}`;
   els.progressHighlights.innerHTML = [
     ["Volumen acumulado", `${totalReps} reps`],
     ["Mejor técnica", `${bestForm}%`],
-    ["Última sesión", `${summary.reps} reps`],
+    ["Tiempo acumulado", `${totalMinutes} min`],
   ].map(([label, value]) => `<div class="progress-highlight"><span>${label}</span><strong>${value}</strong></div>`).join("");
   els.progressChart.innerHTML = lastItems.map((item, index) => {
     const height = Math.max(Number(item.formScore) || 0, 6);
@@ -292,7 +416,7 @@ function renderSaveLog(status, detail) {
 }
 
 function persistHistory() {
-  state.workoutHistory = state.workoutHistory.slice(0, 7);
+  state.workoutHistory = mergeWorkoutHistories(state.workoutHistory).slice(0, MAX_HISTORY_SESSIONS);
   localStorage.setItem(WORKOUT_HISTORY_KEY, JSON.stringify(state.workoutHistory));
 }
 
@@ -300,7 +424,7 @@ function setProgressText() {
   const setNumber = state.workoutCompleted
     ? WORKOUT_SETS
     : Math.min(state.currentSetReps >= REPS_PER_SET ? Math.max(state.completedSets, 1) : currentSetNumber(), WORKOUT_SETS);
-  els.workoutProgress.textContent = `Sesión · ${state.currentSetReps}/${REPS_PER_SET}`;
+  els.workoutProgress.textContent = `Sesión ${state.sessionNumber} · ${state.currentSetReps}/${REPS_PER_SET}`;
   els.stepStart.classList.toggle("active", !state.workoutStartedAt && !state.workoutCompleted);
   els.stepStart.classList.toggle("done", Boolean(state.workoutStartedAt));
   els.stepComplete.classList.toggle("active", Boolean(state.workoutStartedAt) && !state.workoutCompleted);
@@ -481,30 +605,106 @@ function spanishVoice() {
     || null;
 }
 
-function speak(text, { force = false, onend = null, onerror = null, channel = "workout" } = {}) {
+function clearSpeechQueue({ cancel = true } = {}) {
+  state.speechQueue.length = 0;
+  state.speechGeneration += 1;
+  state.speechActive = false;
+  state.activeUtterance = null;
+  state.activeSpeechItem = null;
+  window.clearTimeout(state.speechWatchdog);
+  if (cancel && "speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+function drainSpeechQueue() {
+  if (state.speechActive || !state.speechQueue.length || !("speechSynthesis" in window)) return;
+  const item = state.speechQueue.shift();
+  if (!item || item.generation !== state.speechGeneration) {
+    drainSpeechQueue();
+    return;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(item.text);
+  utterance.lang = "es-MX";
+  utterance.rate = item.rate || 1.06;
+  utterance.pitch = 1.02;
+  const voice = spanishVoice();
+  if (voice) utterance.voice = voice;
+
+  state.speechActive = true;
+  state.activeUtterance = utterance;
+  state.activeSpeechItem = item;
+  const runId = ++state.speechRunId;
+  let settled = false;
+  const settle = (kind) => {
+    if (settled || item.generation !== state.speechGeneration || runId !== state.speechRunId) return;
+    settled = true;
+    window.clearTimeout(state.speechWatchdog);
+    state.speechActive = false;
+    state.activeUtterance = null;
+    state.activeSpeechItem = null;
+    if (kind === "end" && item.onend) item.onend();
+    if (kind === "error" && item.onerror) item.onerror();
+    window.setTimeout(drainSpeechQueue, item.pauseAfter ?? 90);
+  };
+  utterance.onend = () => settle("end");
+  utterance.onerror = () => settle("error");
+
+  const words = item.text.trim().split(/\s+/).filter(Boolean).length;
+  const watchdogMs = Math.max(3500, words * 650);
+  state.speechWatchdog = window.setTimeout(() => {
+    if (item.generation !== state.speechGeneration) return;
+    window.speechSynthesis.cancel();
+    settle("error");
+  }, watchdogMs);
+
+  try {
+    window.speechSynthesis.speak(utterance);
+  } catch (error) {
+    settle("error");
+  }
+}
+
+function speak(text, {
+  force = false,
+  onend = null,
+  onerror = null,
+  channel = "workout",
+  priority = false,
+  dedupeKey = "",
+  pauseAfter = 90,
+  rate = 1.06,
+} = {}) {
   const sequenceLocked = state.voicePhase === "briefing" || state.voicePhase === "countdown";
   if (sequenceLocked && channel !== "sequence" && channel !== "control") return null;
-  if (state.voicePhase === "complete" && channel === "workout") return null;
+  if (state.voicePhase === "complete" && !["complete", "control"].includes(channel)) return null;
   if ((!state.voiceEnabled && !force) || !("speechSynthesis" in window)) {
     if (onend) window.setTimeout(onend, 0);
     return null;
   }
-  const runId = ++state.speechRunId;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "es-MX";
-  utterance.rate = 1.04;
-  utterance.pitch = 1.02;
-  const voice = spanishVoice();
-  if (voice) utterance.voice = voice;
-  utterance.onend = () => {
-    if (runId === state.speechRunId && onend) onend();
+  if (dedupeKey) {
+    const duplicateActive = state.activeSpeechItem?.dedupeKey === dedupeKey;
+    const duplicateQueued = state.speechQueue.some((item) => item.dedupeKey === dedupeKey);
+    if (duplicateActive || duplicateQueued) return null;
+  }
+  const item = {
+    text: String(text || "").trim(),
+    force,
+    onend,
+    onerror,
+    channel,
+    dedupeKey,
+    pauseAfter,
+    rate,
+    generation: state.speechGeneration,
   };
-  utterance.onerror = () => {
-    if (runId === state.speechRunId && onerror) onerror();
-  };
-  window.speechSynthesis.speak(utterance);
-  return utterance;
+  if (!item.text) {
+    if (onend) window.setTimeout(onend, 0);
+    return null;
+  }
+  if (priority) state.speechQueue.unshift(item);
+  else state.speechQueue.push(item);
+  drainSpeechQueue();
+  return item;
 }
 
 function capitalized(value) {
@@ -525,22 +725,27 @@ function sessionDateLabel() {
 
 function announceSessionBriefing({ continuation = false } = {}) {
   const dateLabel = sessionDateLabel();
+  const plan = state.activeSessionPlan || defaultSessionPlan(state.sessionNumber);
+  const exerciseNames = plan.exercises.slice(0, 3).map((exercise) => exercise.name).join(", ");
   const visiblePlan = continuation
-    ? "Continuamos con tu sesión de curl. Te quedan las repeticiones necesarias para completar el objetivo."
-    : `Hola Omar. Hoy es ${dateLabel}. Hoy te toca entrenar el bíceps. Empezamos con curl estricto: una sesión de ${REPS_PER_SET} repeticiones. Mantén el codo estable, el torso quieto y controla la bajada. Yo te iré guiando durante toda la sesión, contando cada repetición y avisándote de tu técnica. Al terminar te felicitaré y te mostraré tus estadísticas.`;
+    ? `Continuamos con la sesión ${state.sessionNumber}. Completa las repeticiones pendientes de curl con el torso quieto y una bajada controlada.`
+    : `Hola Omar. Sesión ${state.sessionNumber}. Hoy es ${dateLabel} y vamos a trabajar ${plan.focus.toLowerCase()}. Tu rutina incluye ${exerciseNames}. Primero te guiaré en un bloque de ${REPS_PER_SET} repeticiones de curl estricto. Mantén el codo estable, el torso quieto y controla la bajada. Cuando termine este resumen contaré uno, dos, tres. Solo después de tres empezaremos a contar tus repeticiones.`;
   els.liveCoach.textContent = visiblePlan;
   setLiveStatus(continuation ? "continuamos" : "briefing", "active");
-  state.briefingUntil = Date.now() + (continuation ? 3500 : 9000);
-  state.briefingMinimumUntil = Date.now() + (continuation ? 6000 : 14000);
+  state.briefingUntil = Number.POSITIVE_INFINITY;
+  state.briefingMinimumUntil = 0;
   state.briefingFinished = false;
   state.voicePhase = "briefing";
   window.clearTimeout(state.countdownTimer);
   state.countingEnabled = false;
   state.countdownActive = false;
+  clearSpeechQueue();
   speak(visiblePlan, {
     onend: queueCountdownAfterBriefing,
     onerror: queueCountdownAfterBriefing,
     channel: "sequence",
+    rate: 1.03,
+    pauseAfter: 180,
   });
   state.sessionIntroSpoken = true;
 }
@@ -548,9 +753,8 @@ function announceSessionBriefing({ continuation = false } = {}) {
 function queueCountdownAfterBriefing() {
   if (state.briefingFinished) return;
   state.briefingFinished = true;
-  const wait = Math.max(0, state.briefingMinimumUntil - Date.now());
   window.clearTimeout(state.countdownTimer);
-  state.countdownTimer = window.setTimeout(startCountdown, wait);
+  state.countdownTimer = window.setTimeout(startCountdown, 250);
 }
 
 function startCountdown() {
@@ -560,42 +764,53 @@ function startCountdown() {
   state.countingEnabled = false;
   state.lastSpokenRep = 0;
   state.lastSpokenCue = "";
-  let count = 1;
-  const sayNext = () => {
-    if (count > 3) {
-      state.countdownActive = false;
-      state.countingEnabled = true;
-      state.voicePhase = "workout";
-      state.briefingUntil = 0;
-      els.liveCoach.textContent = "Ahora sí. Empieza con el brazo extendido.";
-      setLiveStatus("en vivo", "active");
-      startTrackingAfterCountdown().catch((error) => {
-        console.error("Tracking start failed", error);
-        updateLiveDashboard({
-          coach: "No pude iniciar el seguimiento. Pulsa Continuar entrenamiento.",
-          status: "error",
-          statusVariant: "warning",
-        });
+  let activated = false;
+  const activateTracking = () => {
+    if (activated || !state.liveActive || state.workoutCompleted) return;
+    activated = true;
+    state.countdownActive = false;
+    state.countingEnabled = true;
+    state.voicePhase = "workout";
+    state.briefingUntil = 0;
+    els.liveCoach.textContent = "Ahora sí. Empieza con el brazo completamente extendido.";
+    setLiveStatus("en vivo", "active");
+    startTrackingAfterCountdown().catch((error) => {
+      console.error("Tracking start failed", error);
+      updateLiveDashboard({
+        coach: "No pude iniciar el seguimiento. Pulsa Continuar entrenamiento.",
+        status: "error",
+        statusVariant: "warning",
       });
-      return;
-    }
-    const phrase = count === 3 ? "Tres. Ahora empieza." : String(count);
-    count += 1;
-    speak(phrase, { onend: () => window.setTimeout(sayNext, 220), channel: "sequence" });
+    });
   };
   els.liveCoach.textContent = "Prepárate. La sesión comienza después de la cuenta atrás.";
   setLiveStatus("preparando", "warning");
-  sayNext();
+  speak("Uno", { channel: "sequence", pauseAfter: 260, rate: 0.98 });
+  speak("Dos", { channel: "sequence", pauseAfter: 260, rate: 0.98 });
+  speak("Tres. Ahora empieza.", {
+    channel: "sequence",
+    onend: activateTracking,
+    onerror: activateTracking,
+    pauseAfter: 0,
+    rate: 0.98,
+  });
 }
 
-function announceRep() {
+function announceRep({ onComplete = null } = {}) {
   if (state.currentSetReps <= state.lastSpokenRep) return;
   state.lastSpokenRep = state.currentSetReps;
-  const remaining = Math.max(state.targetReps - state.currentSetReps, 0);
-  if (remaining === 0) {
-    return;
-  }
-  speak(`Llevas ${state.currentSetReps}. Te faltan ${remaining}. Mantén la técnica.`);
+  const numberWords = ["Cero", "Uno", "Dos", "Tres", "Cuatro", "Cinco", "Seis", "Siete", "Ocho"];
+  const isComplete = state.currentSetReps >= state.targetReps;
+  speak(isComplete
+    ? `${numberWords[state.currentSetReps] || state.currentSetReps}. Serie completada.`
+    : (numberWords[state.currentSetReps] || String(state.currentSetReps)), {
+    channel: "rep",
+    priority: true,
+    pauseAfter: 35,
+    rate: 1.08,
+    onend: isComplete ? onComplete : null,
+    onerror: isComplete ? onComplete : null,
+  });
 }
 
 function motivate() {
@@ -604,7 +819,7 @@ function motivate() {
   state.lastMotivationAt = now;
   speak(state.currentSetReps >= state.targetReps - 2
     ? "Muy bien. Las últimas cuentan; aprieta y controla la bajada."
-    : "Buen ritmo. Mantén el torso quieto y sigue fuerte.");
+    : "Buen ritmo. Mantén el torso quieto y sigue fuerte.", { channel: "coaching", dedupeKey: "motivation" });
 }
 
 function speakFormCue(message) {
@@ -614,7 +829,7 @@ function speakFormCue(message) {
   if (now - state.lastCueAt < 8000 || message === state.lastSpokenCue) return;
   state.lastCueAt = now;
   state.lastSpokenCue = message;
-  speak(message);
+  speak(message, { channel: "coaching", dedupeKey: `form:${message}` });
 }
 
 async function loadPoseModel() {
@@ -673,7 +888,7 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
   }
   if (!state.stream) return;
 
-  await loadPoseModel();
+  const poseReady = loadPoseModel();
   state.liveActive = true;
   if (!state.workoutStartedAt) state.workoutStartedAt = Date.now();
   if (!state.setStartedAt) state.setStartedAt = Date.now();
@@ -692,16 +907,19 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
   } else if (wasAlreadyStarted) {
     announceSessionBriefing({ continuation: true });
   }
+  await poseReady;
 }
 
 async function startTrackingAfterCountdown() {
+  if (!state.liveActive || !state.countingEnabled || state.trackingStarted) return;
+  await loadPoseModel();
   if (!state.liveActive || !state.countingEnabled || !state.poseLandmarker || state.trackingStarted) return;
-  state.trackingStarted = true;
-  state.lastVideoTime = -1;
-  predictPose();
   if (state.autoRecordAfterCountdown && !state.recording) {
     await startRecording();
   }
+  state.trackingStarted = true;
+  state.lastVideoTime = -1;
+  predictPose();
 }
 
 function stopLiveWorkout(message = "pausado") {
@@ -712,8 +930,7 @@ function stopLiveWorkout(message = "pausado") {
   state.briefingFinished = false;
   state.voicePhase = "idle";
   window.clearTimeout(state.countdownTimer);
-  state.speechRunId += 1;
-  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  clearSpeechQueue();
   window.cancelAnimationFrame(state.liveAnimationFrame);
   window.clearInterval(state.liveTimerInterval);
   els.liveStart.textContent = state.workoutStartedAt && !state.workoutCompleted
@@ -768,8 +985,11 @@ function resetLiveWorkout() {
   state.setAngles = [];
   state.setWarnings = 0;
   state.lastFormWarning = "";
-  state.speechRunId += 1;
-  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  state.smoothedAngle = null;
+  state.phaseCandidate = "unknown";
+  state.phaseCandidateFrames = 0;
+  state.lastRepAt = 0;
+  clearSpeechQueue();
   state.liveStartedAt = state.liveActive ? Date.now() : 0;
   clearOverlay();
   updateLiveDashboard({
@@ -785,6 +1005,7 @@ function resetLiveWorkout() {
 function workoutSummary() {
   return {
     id: sessionId(),
+    sessionNumber: state.sessionNumber,
     completedAt: new Date().toISOString(),
     sets: state.completedSets,
     reps: state.totalReps,
@@ -794,14 +1015,61 @@ function workoutSummary() {
     warnings: state.formWarnings,
     averageAngle: Math.round(average(state.angleSamples)),
     setHistory: state.setHistory,
+    sessionPlan: state.activeSessionPlan,
+    muscles: trainedMuscles,
   };
 }
 
-function renderResultsDashboard(summary) {
+function renderBodyMap(summary, history) {
+  const totalReps = history.reduce((sum, item) => sum + (Number(item.reps) || 0), 0);
+  const totalMinutes = Math.round(history.reduce((sum, item) => sum + (Number(item.durationSeconds) || 0), 0) / 60);
+  els.bodySessionLabel.textContent = `Sesión ${summary.sessionNumber || history.length}`;
+  els.bodyMuscleList.innerHTML = trainedMuscles.map((muscle) => `
+    <div class="muscle-row">
+      <span class="muscle-dot ${muscle.level}"></span>
+      <span><strong>${muscle.name}</strong><small>${muscle.role}</small></span>
+    </div>
+  `).join("");
+  els.bodyHistoryStats.innerHTML = [
+    ["Sesiones de brazo", history.length],
+    ["Reps históricas", totalReps],
+    ["Tiempo registrado", `${totalMinutes} min`],
+  ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
+}
+
+function renderNutritionPlan() {
+  els.nutritionPlan.innerHTML = nutritionPlan.map((item) => `
+    <div class="nutrition-item">
+      <span>${item.time}</span>
+      <strong>${item.meal}</strong>
+      <p>${item.example}</p>
+    </div>
+  `).join("");
+}
+
+function setDashboardPage(pageName) {
+  const selected = ["summary", "progress", "body", "recovery"].includes(pageName) ? pageName : "summary";
+  state.dashboardPage = selected;
+  els.dashboardTabs.forEach((tab) => {
+    const active = tab.dataset.dashboardPage === selected;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  els.dashboardPages.forEach((page) => {
+    page.hidden = page.dataset.dashboardView !== selected;
+  });
+  els.resultsDashboard.scrollTo?.({ top: 0, behavior: "smooth" });
+}
+
+function renderResultsDashboard(summary, { syncState = "saving", page = "summary" } = {}) {
   const duration = formatTime(summary.durationSeconds);
   const history = historyFor(summary);
-  const nextSession = buildNextSession(summary, history);
-  els.dashboardSubtitle.textContent = `${summary.reps} repeticiones registradas · ${duration} · técnica analizada en el dispositivo.`;
+  const nextSession = summary.nextSessionPlan || buildNextSession(summary, history);
+  state.currentDashboardSummary = summary;
+  state.nextSessionPlan = nextSession;
+  els.dashboardSyncStatus.classList.remove("ready", "warning");
+  els.dashboardTitle.textContent = `Sesión ${summary.sessionNumber || history.length} completada`;
+  els.dashboardSubtitle.textContent = `Sesión ${summary.sessionNumber || history.length} · ${summary.reps} repeticiones · ${duration} · técnica analizada en el dispositivo.`;
   els.dashboardMetrics.innerHTML = [
     ["Volumen", `${summary.reps} reps`],
     ["Sets", `${summary.sets}/${WORKOUT_SETS}`],
@@ -809,8 +1077,11 @@ function renderResultsDashboard(summary) {
     ["Avisos", String(summary.warnings)],
   ].map(([label, value]) => `<div class="metric-card"><span class="metric-label">${label}</span><strong class="metric-value">${value}</strong></div>`).join("");
 
-  els.dashboardSessionStatus.textContent = `${summary.reps}/${REPS_PER_SET} reps · ${summary.goodReps} limpias`;
-  els.dashboardSetList.innerHTML = summary.setHistory.map((set) => `
+  els.dashboardSessionStatus.textContent = `${summary.reps}/${REPS_PER_SET} reps · ${summary.goodReps || 0} limpias`;
+  const setHistory = Array.isArray(summary.setHistory) && summary.setHistory.length
+    ? summary.setHistory
+    : [{ set: 1, reps: summary.reps, durationSeconds: summary.durationSeconds, averageAngle: summary.averageAngle, warnings: summary.warnings }];
+  els.dashboardSetList.innerHTML = setHistory.map((set) => `
     <div class="set-row">
       <span><strong>Set ${set.set}</strong><small>${set.durationSeconds}s · ángulo medio ${set.averageAngle || "--"}°</small></span>
       <span>${set.reps}/${REPS_PER_SET} reps${set.warnings ? ` · ${set.warnings} avisos` : " · OK"}</span>
@@ -826,27 +1097,38 @@ function renderResultsDashboard(summary) {
     </div>
   `).join("");
   els.nextSessionNote.textContent = nextSession.note;
+  els.dashboardNewSession.textContent = `Empezar sesión ${nextSession.sessionNumber}`;
   els.recoveryPlan.innerHTML = recoveryPlan.map((item) => `
     <div class="recovery-item"><strong>${item.title}</strong><span>${item.text}</span></div>
   `).join("");
 
   renderProgress(summary, history);
+  renderBodyMap(summary, history);
+  renderNutritionPlan();
   els.dashboardHistoryCount.textContent = `${history.length} sesiones guardadas`;
-  els.dashboardHistory.innerHTML = history.length ? history.slice(0, 5).map((item) => `
+  els.dashboardHistory.innerHTML = history.length ? history.map((item, index) => `
     <div class="history-row">
-      <span><strong>${formatDate(item.completedAt)}</strong><small>${item.sets}/${WORKOUT_SETS} sets · ${formatTime(item.durationSeconds)}</small></span>
-      <span>${item.formScore}% técnica</span>
+      <span><strong>Sesión ${item.sessionNumber || Math.max(history.length - index, 1)} · ${formatDate(item.completedAt)}</strong><small>${item.reps || 0} reps · ${formatTime(item.durationSeconds)} · ${item.warnings || 0} avisos</small></span>
+      <span>${item.formScore || 0}% técnica</span>
     </div>
   `).join("") : `<div class="history-row"><span>Esta es tu primera sesión registrada.</span></div>`;
-  renderSaveLog("saving");
-  els.dashboardSyncStatus.textContent = "Guardando en Azure…";
+  if (syncState === "saving") {
+    renderSaveLog("saving");
+    els.dashboardSyncStatus.textContent = "Guardando en Azure…";
+  } else {
+    renderSaveLog("saved", "Historial disponible en este dispositivo");
+    els.dashboardSyncStatus.textContent = "Historial disponible";
+    els.dashboardSyncStatus.classList.add("ready");
+  }
+  setDashboardPage(page);
 }
 
 async function saveWorkoutSummaryToAzure(summary) {
-  const nextSession = buildNextSession(summary, historyFor(summary));
+  const nextSession = summary.nextSessionPlan || buildNextSession(summary, historyFor(summary));
   const payload = {
-    schema_version: 1,
+    schema_version: 2,
     type: "curl_workout_summary",
+    profile_id: state.profileId,
     session_id: summary.id,
     workout_id: summary.id,
     exercise: "biceps_curl",
@@ -862,7 +1144,7 @@ async function saveWorkoutSummaryToAzure(summary) {
     const response = await fetch(`${apiBase}/create-summary-upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: summary.id }),
+      body: JSON.stringify({ session_id: summary.id, profile_id: state.profileId }),
     });
     if (!response.ok) throw new Error(`create-summary-upload ${response.status}`);
     const upload = await response.json();
@@ -877,7 +1159,7 @@ async function saveWorkoutSummaryToAzure(summary) {
   }
 
   if (containerSasUrl()) {
-    const blobName = `summaries/${safeBlobSegment(summary.id)}/workout-summary.json`;
+    const blobName = `profiles/${safeBlobSegment(state.profileId)}/workout-summaries/${safeBlobSegment(summary.id)}/workout-summary.json`;
     await putBlob(blobName, summaryBlob, "application/json");
     state.azureUploadCount += 1;
     return blobName;
@@ -886,11 +1168,44 @@ async function saveWorkoutSummaryToAzure(summary) {
   throw new Error("Azure no está configurado en docs/config.js");
 }
 
+async function syncWorkoutHistoryFromAzure() {
+  if (!apiBase || !state.profileId) return state.workoutHistory;
+  const response = await fetch(`${apiBase}/workout-history`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ profile_id: state.profileId, limit: MAX_HISTORY_SESSIONS }),
+  });
+  if (!response.ok) throw new Error(`workout-history ${response.status}`);
+  const payload = await response.json();
+  const cloudHistory = Array.isArray(payload.sessions) ? payload.sessions : [];
+  state.workoutHistory = mergeWorkoutHistories(state.workoutHistory, cloudHistory);
+  persistHistory();
+
+  const latest = state.workoutHistory[0];
+  const latestNumber = highestSessionNumber(state.workoutHistory);
+  if (!state.workoutStartedAt && latest && latestNumber >= state.sessionNumber) {
+    const nextPlan = latest.nextSessionPlan || buildNextSession(latest, state.workoutHistory);
+    state.activeSessionPlan = nextPlan;
+    state.sessionNumber = nextPlan.sessionNumber;
+    localStorage.setItem(NEXT_SESSION_PLAN_KEY, JSON.stringify(nextPlan));
+  }
+  if (!els.resultsDashboard.hidden && state.currentDashboardSummary) {
+    const refreshed = state.workoutHistory.find((item) => item.id === state.currentDashboardSummary.id)
+      || state.currentDashboardSummary;
+    renderResultsDashboard(refreshed, { syncState: "saved", page: state.dashboardPage || "progress" });
+    els.dashboardSyncStatus.textContent = "Sincronizado con Azure";
+    renderSaveLog("saved", `${state.workoutHistory.length} sesiones históricas disponibles`);
+  }
+  render();
+  return state.workoutHistory;
+}
+
 function safeBlobSegment(value) {
   return String(value || "session").replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 100) || "session";
 }
 
 function finishWorkout() {
+  if (state.workoutCompleted) return;
   if (!canFinishWorkout()) {
     updateLiveDashboard({
       coach: `No puedes finalizar todavía: completa ${WORKOUT_SETS} sets de ${REPS_PER_SET} repeticiones.`,
@@ -903,7 +1218,11 @@ function finishWorkout() {
   state.workoutCompleted = true;
   if (state.recording) stopRecording();
   const summary = workoutSummary();
-  state.workoutHistory = [summary, ...state.workoutHistory.filter((item) => item.id !== summary.id)];
+  const historyWithCurrent = mergeWorkoutHistories([summary], state.workoutHistory);
+  summary.nextSessionPlan = buildNextSession(summary, historyWithCurrent);
+  state.nextSessionPlan = summary.nextSessionPlan;
+  localStorage.setItem(NEXT_SESSION_PLAN_KEY, JSON.stringify(summary.nextSessionPlan));
+  state.workoutHistory = mergeWorkoutHistories([summary], state.workoutHistory);
   persistHistory();
   stopLiveWorkout("completado");
   renderResultsDashboard(summary);
@@ -1052,43 +1371,49 @@ function drawPoint(ctx, point, color, radius) {
 function countCurl(angle) {
   const downAngle = 148;
   const upAngle = 78;
+  const requiredStableFrames = 3;
+  const candidate = angle >= downAngle ? "down" : angle <= upAngle ? "up" : "middle";
 
-  if (angle > downAngle) {
-    if (state.curlPhase === "unknown") {
-      state.curlPhase = "down";
-      return "Listo. Sube controlado hasta flexionar el codo.";
-    }
-    if (state.curlPhase === "up") {
-      state.curlPhase = "down";
-      return "Bajada completa. Siguiente rep lista.";
-    }
-    return "Brazo abajo. Sube sin balancear el torso.";
+  if (candidate === "middle") {
+    state.phaseCandidate = "middle";
+    state.phaseCandidateFrames = 0;
+    return state.curlPhase === "down"
+      ? "Sube con el codo estable."
+      : "Baja controlado hasta extender el brazo.";
   }
 
-  if (angle < upAngle) {
-    if (state.curlPhase === "down") {
-      if (state.currentSetReps >= REPS_PER_SET) {
-        return state.completedSets >= WORKOUT_SETS
-          ? "Los 4 sets están completos. Pulsa Finalizar entrenamiento."
-          : "Set completo. Reinicia el set después de descansar.";
-      }
-      state.totalReps += 1;
-      state.currentSetReps += 1;
-      state.curlPhase = "up";
-      if (state.currentSetReps >= REPS_PER_SET) {
-        recordCompletedSet();
-        return state.completedSets >= WORKOUT_SETS
-          ? "Cuarto set completo. Ya puedes finalizar."
-          : `Set ${state.completedSets} completo. Descansa y reinicia el set.`;
-      }
-      return `Curl ${state.totalReps} contada. Baja completo para la siguiente.`;
-    }
-    return "Arriba. Baja completo antes de contar otra.";
+  if (state.phaseCandidate === candidate) state.phaseCandidateFrames += 1;
+  else {
+    state.phaseCandidate = candidate;
+    state.phaseCandidateFrames = 1;
   }
 
-  return state.curlPhase === "down"
-    ? "Subiendo. Mantén el codo estable."
-    : "Bajando controlado hasta extender el brazo.";
+  if (state.phaseCandidateFrames < requiredStableFrames) {
+    return candidate === "down" ? "Completa la extensión." : "Aprieta arriba sin balancearte.";
+  }
+
+  if (candidate === "down") {
+    if (state.curlPhase !== "down") state.curlPhase = "down";
+    return state.currentSetReps
+      ? "Extensión completa. Siguiente repetición."
+      : "Posición inicial lista. Sube controlado.";
+  }
+
+  if (state.curlPhase === "down" && Date.now() - state.lastRepAt >= 650) {
+    if (state.currentSetReps >= REPS_PER_SET) return "Objetivo de ocho repeticiones completo.";
+    state.totalReps += 1;
+    state.currentSetReps += 1;
+    state.lastRepAt = Date.now();
+    state.curlPhase = "up";
+    state.phaseCandidateFrames = 0;
+    if (state.currentSetReps >= REPS_PER_SET) {
+      recordCompletedSet();
+      return "Ocho repeticiones completas. Preparando tu dashboard.";
+    }
+    return `Repetición ${state.currentSetReps} registrada. Baja completo.`;
+  }
+
+  return "Arriba. Baja completo antes de la siguiente repetición.";
 }
 
 function handlePoseResult(result) {
@@ -1119,8 +1444,8 @@ function handlePoseResult(result) {
   }
 
   const indexes = armLandmarks[arm];
-  const angle = elbowAngle(landmarks[indexes.shoulder], landmarks[indexes.elbow], landmarks[indexes.wrist]);
-  if (angle === null) {
+  const measuredAngle = elbowAngle(landmarks[indexes.shoulder], landmarks[indexes.elbow], landmarks[indexes.wrist]);
+  if (measuredAngle === null) {
     updateLiveDashboard({
       angle: null,
       coach: "No puedo calcular el angulo del codo todavia.",
@@ -1129,6 +1454,10 @@ function handlePoseResult(result) {
     });
     return;
   }
+  state.smoothedAngle = state.smoothedAngle === null
+    ? measuredAngle
+    : state.smoothedAngle * 0.68 + measuredAngle * 0.32;
+  const angle = state.smoothedAngle;
 
   if (!state.countingEnabled) {
     updateLiveDashboard({
@@ -1155,7 +1484,21 @@ function handlePoseResult(result) {
   const coach = warning || coachFromAngle;
   if (state.currentSetReps > repsBefore) {
     if (!warning) state.goodReps += 1;
-    announceRep();
+    if (canFinishWorkout() && !state.completionScheduled) {
+      state.completionScheduled = true;
+      let completionStarted = false;
+      const completeAfterCount = () => {
+        if (completionStarted) return;
+        completionStarted = true;
+        window.setTimeout(() => {
+          state.completionScheduled = false;
+          finishWorkout();
+        }, 120);
+      };
+      announceRep({ onComplete: completeAfterCount });
+    } else {
+      announceRep();
+    }
   } else if (warning) {
     speakFormCue(warning);
   } else if (state.currentSetReps === 0) {
@@ -1167,13 +1510,6 @@ function handlePoseResult(result) {
     status: "en vivo",
     statusVariant: "active",
   });
-  if (state.currentSetReps > repsBefore && canFinishWorkout() && !state.completionScheduled) {
-    state.completionScheduled = true;
-    window.setTimeout(() => {
-      state.completionScheduled = false;
-      finishWorkout();
-    }, 250);
-  }
 }
 
 function predictPose() {
@@ -1454,6 +1790,67 @@ async function uploadWithContainerSas(videoBlob, metadataBlob, metadata) {
   render();
 }
 
+function prepareNewSession(plan = null) {
+  if (state.recording) return false;
+  const selectedPlan = plan
+    || loadNextSessionPlan()
+    || defaultSessionPlan(highestSessionNumber(state.workoutHistory) + 1);
+  clearSpeechQueue();
+  state.workoutId = createWorkoutId();
+  localStorage.setItem("curlVisionWorkoutId", state.workoutId);
+  state.sessionNumber = Number(selectedPlan.sessionNumber)
+    || highestSessionNumber(state.workoutHistory) + 1;
+  state.activeSessionPlan = { ...selectedPlan, sessionNumber: state.sessionNumber };
+  state.nextSessionPlan = null;
+  state.clipCount = 0;
+  state.azureUploadCount = 0;
+  state.completedSets = 0;
+  state.totalReps = 0;
+  state.workoutStartedAt = 0;
+  state.workoutCompleted = false;
+  state.formWarnings = 0;
+  state.goodReps = 0;
+  state.angleSamples = [];
+  state.setHistory = [];
+  state.completionScheduled = false;
+  state.sessionIntroSpoken = false;
+  els.resultsDashboard.hidden = true;
+  resetLiveWorkout();
+  els.downloads.hidden = true;
+  els.status.textContent = `Sesión ${state.sessionNumber} lista`;
+  render();
+  return true;
+}
+
+async function startGeneratedNextSession() {
+  const plan = state.nextSessionPlan
+    || loadNextSessionPlan()
+    || defaultSessionPlan(highestSessionNumber(state.workoutHistory) + 1);
+  if (!prepareNewSession(plan)) return;
+  updateLiveDashboard({
+    coach: `Preparando el resumen de tu sesión ${state.sessionNumber}.`,
+    status: "preparando",
+    statusVariant: "warning",
+  });
+  await startLiveWorkout({ autoRecord: true });
+}
+
+function openHistoricalDashboard() {
+  const latest = state.workoutHistory[0];
+  if (!latest) {
+    updateLiveDashboard({
+      coach: "Todavía no hay sesiones guardadas. Completa ocho repeticiones para crear tu primer registro.",
+      status: "sin historial",
+      statusVariant: "warning",
+    });
+    speak("Todavía no hay sesiones guardadas. Completa tu primera sesión para ver el progreso.", { channel: "control" });
+    return;
+  }
+  renderResultsDashboard(latest, { syncState: "saved", page: "progress" });
+  els.resultsDashboard.hidden = false;
+  syncWorkoutHistoryFromAzure().catch((error) => console.warn("History sync failed", error));
+}
+
 els.previous.addEventListener("click", () => {
   if (state.recording) return;
   state.selectedIndex = state.selectedIndex === 0 ? drills.length - 1 : state.selectedIndex - 1;
@@ -1484,11 +1881,17 @@ els.cameraStart.addEventListener("click", () => {
 });
 
 els.voiceToggle.addEventListener("click", () => {
+  const phaseBeforeToggle = state.voicePhase;
   state.voiceEnabled = !state.voiceEnabled;
   if (!state.voiceEnabled && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
+    clearSpeechQueue();
+    if (phaseBeforeToggle === "briefing") queueCountdownAfterBriefing();
+    if (phaseBeforeToggle === "countdown") {
+      state.countdownActive = false;
+      startCountdown();
+    }
   } else {
-    speak(state.liveActive ? "Voz activada. Estoy contigo." : "Voz activada. Pulsa Empezar entrenamiento para comenzar.", { force: true, channel: "control" });
+    speak(state.liveActive ? "Voz activada. Estoy contigo." : "Voz activada. Pulsa Empezar entrenamiento para comenzar.", { force: true, channel: "control", priority: true });
   }
   render();
 });
@@ -1500,26 +1903,7 @@ els.saveAzure.addEventListener("click", () => {
 });
 
 els.newSession.addEventListener("click", () => {
-  if (state.recording) return;
-  state.workoutId = createWorkoutId();
-  localStorage.setItem("curlVisionWorkoutId", state.workoutId);
-  state.clipCount = 0;
-  state.azureUploadCount = 0;
-  state.completedSets = 0;
-  state.totalReps = 0;
-  state.workoutStartedAt = 0;
-  state.workoutCompleted = false;
-  state.formWarnings = 0;
-  state.goodReps = 0;
-  state.angleSamples = [];
-  state.setHistory = [];
-  state.completionScheduled = false;
-  state.sessionIntroSpoken = false;
-  els.resultsDashboard.hidden = true;
-  resetLiveWorkout();
-  els.downloads.hidden = true;
-  els.status.textContent = "Nueva sesión lista";
-  render();
+  prepareNewSession();
 });
 
 els.liveStart.addEventListener("click", () => {
@@ -1537,9 +1921,17 @@ els.dashboardClose.addEventListener("click", () => {
   els.resultsDashboard.hidden = true;
 });
 
+els.dashboardOpenHistory.addEventListener("click", openHistoricalDashboard);
+
+els.dashboardTabs.forEach((tab) => {
+  tab.addEventListener("click", () => setDashboardPage(tab.dataset.dashboardPage));
+});
+
 els.dashboardNewSession.addEventListener("click", () => {
-  els.resultsDashboard.hidden = true;
-  els.newSession.click();
+  startGeneratedNextSession().catch((error) => {
+    console.error("Next session failed", error);
+    alert(`No pude iniciar la siguiente sesión: ${error.message || error}`);
+  });
 });
 
 els.switchCamera.addEventListener("click", () => {
@@ -1552,6 +1944,9 @@ els.switchCamera.addEventListener("click", () => {
 els.azureSas.value = containerSasUrl();
 render();
 updateLiveDashboard();
+syncWorkoutHistoryFromAzure().catch((error) => {
+  console.warn("Azure history is not available yet", error);
+});
 window.addEventListener("resize", resizeOverlay);
 
 if (window.isSecureContext || ["localhost", "127.0.0.1"].includes(window.location.hostname)) {
