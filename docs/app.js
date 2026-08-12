@@ -74,6 +74,9 @@ const state = {
   workoutHistory: loadWorkoutHistory(),
   completionScheduled: false,
   sessionIntroSpoken: false,
+  countingEnabled: false,
+  countdownActive: false,
+  speechRunId: 0,
 };
 
 const els = {
@@ -470,8 +473,12 @@ function spanishVoice() {
     || null;
 }
 
-function speak(text, { force = false } = {}) {
-  if ((!state.voiceEnabled && !force) || !("speechSynthesis" in window)) return;
+function speak(text, { force = false, onend = null } = {}) {
+  if ((!state.voiceEnabled && !force) || !("speechSynthesis" in window)) {
+    if (onend) window.setTimeout(onend, 0);
+    return null;
+  }
+  const runId = ++state.speechRunId;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "es-MX";
@@ -479,6 +486,10 @@ function speak(text, { force = false } = {}) {
   utterance.pitch = 1.02;
   const voice = spanishVoice();
   if (voice) utterance.voice = voice;
+  utterance.onend = () => {
+    if (runId === state.speechRunId && onend) onend();
+  };
+  utterance.onerror = utterance.onend;
   window.speechSynthesis.speak(utterance);
   return utterance;
 }
@@ -507,8 +518,35 @@ function announceSessionBriefing({ continuation = false } = {}) {
   els.liveCoach.textContent = visiblePlan;
   setLiveStatus(continuation ? "continuamos" : "briefing", "active");
   state.briefingUntil = Date.now() + (continuation ? 3500 : 9000);
-  speak(visiblePlan);
+  state.countingEnabled = false;
+  state.countdownActive = false;
+  speak(visiblePlan, { onend: startCountdown });
   state.sessionIntroSpoken = true;
+}
+
+function startCountdown() {
+  if (state.countdownActive || state.workoutCompleted) return;
+  state.countdownActive = true;
+  state.countingEnabled = false;
+  state.lastSpokenRep = 0;
+  state.lastSpokenCue = "";
+  let count = 1;
+  const sayNext = () => {
+    if (count > 3) {
+      state.countdownActive = false;
+      state.countingEnabled = true;
+      state.briefingUntil = 0;
+      els.liveCoach.textContent = "Ahora sí. Empieza con el brazo extendido.";
+      setLiveStatus("en vivo", "active");
+      return;
+    }
+    const phrase = count === 3 ? "Tres. Ahora empieza." : String(count);
+    count += 1;
+    speak(phrase, { onend: () => window.setTimeout(sayNext, 220) });
+  };
+  els.liveCoach.textContent = "Prepárate. La sesión comienza después de la cuenta atrás.";
+  setLiveStatus("preparando", "warning");
+  sayNext();
 }
 
 function announceRep() {
@@ -516,7 +554,6 @@ function announceRep() {
   state.lastSpokenRep = state.currentSetReps;
   const remaining = Math.max(state.targetReps - state.currentSetReps, 0);
   if (remaining === 0) {
-    speak(`Llevas ${state.currentSetReps} repeticiones. Sesión completada.`);
     return;
   }
   speak(`Llevas ${state.currentSetReps}. Te faltan ${remaining}. Mantén la técnica.`);
@@ -533,6 +570,7 @@ function motivate() {
 
 function speakFormCue(message) {
   const now = Date.now();
+  if (!state.countingEnabled) return;
   if (now < state.briefingUntil) return;
   if (now - state.lastCueAt < 8000 || message === state.lastSpokenCue) return;
   state.lastCueAt = now;
@@ -623,6 +661,10 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
 
 function stopLiveWorkout(message = "pausado") {
   state.liveActive = false;
+  state.countingEnabled = false;
+  state.countdownActive = false;
+  state.speechRunId += 1;
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   window.cancelAnimationFrame(state.liveAnimationFrame);
   window.clearInterval(state.liveTimerInterval);
   els.liveStart.textContent = state.workoutStartedAt && !state.workoutCompleted
@@ -647,9 +689,6 @@ function recordCompletedSet() {
     warnings: state.setWarnings,
   });
   const isWorkoutReady = state.completedSets >= WORKOUT_SETS;
-  speak(isWorkoutReady
-    ? "Octava repetición completa. Excelente, Omar. Estoy preparando tu dashboard."
-    : `Set ${state.completedSets} completo. Descansa y reinicia el set cuando estés listo.`);
   updateLiveDashboard({
     coach: isWorkoutReady
       ? "Objetivo completado. Revisa tus estadísticas o finaliza el entrenamiento."
@@ -662,6 +701,8 @@ function recordCompletedSet() {
 
 function resetLiveWorkout() {
   state.currentSetReps = 0;
+  state.countingEnabled = false;
+  state.countdownActive = false;
   state.curlPhase = "unknown";
   state.setRecorded = false;
   state.lastSpokenRep = 0;
@@ -674,6 +715,7 @@ function resetLiveWorkout() {
   state.setAngles = [];
   state.setWarnings = 0;
   state.lastFormWarning = "";
+  state.speechRunId += 1;
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   state.liveStartedAt = state.liveActive ? Date.now() : 0;
   clearOverlay();
@@ -1034,6 +1076,18 @@ function handlePoseResult(result) {
     return;
   }
 
+  if (!state.countingEnabled) {
+    updateLiveDashboard({
+      angle,
+      coach: state.countdownActive
+        ? "Prepárate. Escucha la cuenta atrás antes de empezar."
+        : "Escucha el briefing; todavía no cuento repeticiones.",
+      status: state.countdownActive ? "preparando" : "briefing",
+      statusVariant: "warning",
+    });
+    return;
+  }
+
   const repsBefore = state.currentSetReps;
   const coachFromAngle = countCurl(angle);
   const warning = formWarning(landmarks, arm);
@@ -1048,7 +1102,6 @@ function handlePoseResult(result) {
   if (state.currentSetReps > repsBefore) {
     if (!warning) state.goodReps += 1;
     announceRep();
-    motivate();
   } else if (warning) {
     speakFormCue(warning);
   } else if (state.currentSetReps === 0) {
