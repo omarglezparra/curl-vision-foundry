@@ -80,14 +80,28 @@
           </div>
         </div>
         <div id="dashboard-metrics" class="dashboard-metrics"></div>
+        <div class="dashboard-card progress-card">
+          <div class="card-heading">
+            <div><h3>Tu progreso</h3><p class="card-caption">Cada sesión queda registrada para comparar técnica y volumen.</p></div>
+            <span id="progress-period" class="status-pill">Últimas sesiones</span>
+          </div>
+          <div class="progress-overview">
+            <div class="progress-score"><strong id="progress-score">0%</strong><span>técnica media</span></div>
+            <div id="progress-highlights" class="progress-highlights"></div>
+            <div id="progress-chart" class="progress-chart" aria-label="Gráfica de progreso"></div>
+          </div>
+        </div>
+        <div id="dashboard-save-log" class="save-log" aria-live="polite"></div>
         <div class="dashboard-columns">
           <div class="dashboard-card">
             <div class="card-heading"><h3>Detalle de la sesión</h3><span id="dashboard-session-status" class="status-pill">8/8 reps</span></div>
             <div id="dashboard-set-list" class="set-list"></div>
           </div>
           <div class="dashboard-card">
-            <div class="card-heading"><h3>Próxima rutina · brazos</h3><span class="status-pill ready">Cargada</span></div>
+            <div class="card-heading"><div><h3>Siguiente sesión con IA</h3><p id="next-session-date" class="card-caption"></p></div><span class="status-pill ready">Cargada</span></div>
+            <p id="next-session-goal" class="next-session-goal"></p>
             <div id="next-routine" class="routine-list"></div>
+            <p id="next-session-note" class="next-session-note"></p>
           </div>
         </div>
         <div class="dashboard-card dashboard-history-card">
@@ -106,7 +120,7 @@
         <div id="steps"></div>
         <div id="live-progress-bar"></div>
         <h2 id="panel-title">Curl estricto</h2>
-        <p id="target">Fallo estimado: 12 repeticiones</p>
+        <p id="target">Objetivo: 1 sesión de 8 repeticiones</p>
         <strong id="counter">1/1</strong>
         <div id="cues"></div>
         <strong id="session-id"></strong>

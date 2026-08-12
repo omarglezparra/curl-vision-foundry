@@ -19,12 +19,6 @@ const drills = [
 const WORKOUT_SETS = 1;
 const REPS_PER_SET = 8;
 const WORKOUT_HISTORY_KEY = "curlVisionWorkoutHistory";
-const nextArmRoutine = [
-  { name: "Curl estricto", detail: "4 sets · 8 reps · 75 s descanso", cue: "Codo estable" },
-  { name: "Curl martillo", detail: "3 sets · 10 reps · 60 s descanso", cue: "Muñeca neutra" },
-  { name: "Curl inclinado", detail: "3 sets · 8 reps · 75 s descanso", cue: "Bajada de 3 s" },
-  { name: "Extensión de tríceps", detail: "3 sets · 10 reps · 60 s descanso", cue: "Hombros abajo" },
-];
 const recoveryPlan = [
   { title: "Descanso", text: "Deja 24–48 h antes de volver a entrenar bíceps. Entre ejercicios: 60–90 s." },
   { title: "Comida", text: "Incluye proteína, carbohidrato, fruta o verdura y agua: huevos, pollo, yogur, arroz, avena o legumbres." },
@@ -132,6 +126,14 @@ const els = {
   dashboardNewSession: document.getElementById("dashboard-new-session"),
   dashboardSyncStatus: document.getElementById("dashboard-sync-status"),
   recoveryPlan: document.getElementById("recovery-plan"),
+  dashboardSaveLog: document.getElementById("dashboard-save-log"),
+  progressScore: document.getElementById("progress-score"),
+  progressHighlights: document.getElementById("progress-highlights"),
+  progressChart: document.getElementById("progress-chart"),
+  progressPeriod: document.getElementById("progress-period"),
+  nextSessionDate: document.getElementById("next-session-date"),
+  nextSessionGoal: document.getElementById("next-session-goal"),
+  nextSessionNote: document.getElementById("next-session-note"),
 };
 
 const poseModelUrl =
@@ -209,6 +211,73 @@ function formatDate(value) {
   } catch (error) {
     return "Hoy";
   }
+}
+
+function nextSessionDate(value) {
+  const tomorrow = new Date(value || Date.now());
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  try {
+    return new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "2-digit", month: "short" }).format(tomorrow);
+  } catch (error) {
+    return "Mañana";
+  }
+}
+
+function historyFor(summary) {
+  return [summary, ...state.workoutHistory.filter((item) => item.id !== summary.id)].slice(0, 8);
+}
+
+function buildNextSession(summary, history) {
+  const techniqueReady = summary.formScore >= 88 && summary.warnings <= 1;
+  const recentAverage = Math.round(average(history.map((item) => Number(item.formScore) || 0)));
+  if (techniqueReady) {
+    return {
+      goal: "Hipertrofia con progresión controlada · termina la última serie cerca del fallo técnico.",
+      exercises: [
+        { name: "Curl estricto", detail: "3 series · 8–12 reps · 90 s", cue: "RIR 1–2" },
+        { name: "Curl martillo", detail: "3 series · 10–12 reps · 75 s", cue: "RIR 1–2" },
+        { name: "Curl inclinado", detail: "2 series · 10–12 reps · 90 s", cue: "Bajada 3 s" },
+        { name: "Extensión de tríceps", detail: "3 series · 10–12 reps · 75 s", cue: "Técnica limpia" },
+      ],
+      note: `Tu técnica fue ${summary.formScore}%. Si completas el máximo de reps en todas las series sin perder forma, aumenta la carga un 2–5% en la siguiente sesión. Media reciente: ${recentAverage}%.`,
+    };
+  }
+  return {
+    goal: "Consolidar técnica antes de subir carga · no busques el fallo mientras haya avisos de postura.",
+    exercises: [
+      { name: "Curl estricto", detail: "3 series · 8–10 reps · 120 s", cue: "RIR 2–3" },
+      { name: "Curl martillo", detail: "2 series · 10 reps · 90 s", cue: "Muñeca neutra" },
+      { name: "Curl inclinado", detail: "2 series · 8–10 reps · 120 s", cue: "Rango completo" },
+      { name: "Extensión de tríceps", detail: "2 series · 10 reps · 90 s", cue: "Sin balanceo" },
+    ],
+    note: `Javier detectó ${summary.warnings} avisos de técnica. Repite una carga cómoda y detén la serie cuando aparezca el primer fallo técnico. Media reciente: ${recentAverage}%.`,
+  };
+}
+
+function renderProgress(summary, history) {
+  const avgForm = Math.round(average(history.map((item) => Number(item.formScore) || 0)));
+  const totalReps = history.reduce((sum, item) => sum + (Number(item.reps) || 0), 0);
+  const bestForm = Math.max(...history.map((item) => Number(item.formScore) || 0), 0);
+  const lastItems = history.slice(0, 6).reverse();
+  els.progressScore.textContent = `${avgForm}%`;
+  els.progressPeriod.textContent = `${history.length} ${history.length === 1 ? "sesión" : "sesiones"}`;
+  els.progressHighlights.innerHTML = [
+    ["Volumen acumulado", `${totalReps} reps`],
+    ["Mejor técnica", `${bestForm}%`],
+    ["Última sesión", `${summary.reps} reps`],
+  ].map(([label, value]) => `<div class="progress-highlight"><span>${label}</span><strong>${value}</strong></div>`).join("");
+  els.progressChart.innerHTML = lastItems.map((item, index) => {
+    const height = Math.max(Number(item.formScore) || 0, 6);
+    return `<div class="chart-column"><span class="chart-value">${item.formScore}%</span><div class="chart-bar" style="height:${height}%"></div><small>${formatDate(item.completedAt)}</small></div>`;
+  }).join("");
+}
+
+function renderSaveLog(status, detail) {
+  const icon = status === "saved" ? "✓" : status === "pending" ? "↻" : "•";
+  els.dashboardSaveLog.innerHTML = `
+    <div class="save-log-item"><span class="save-log-icon">✓</span><span><strong>Sesión capturada</strong><small>Estadísticas calculadas en este dispositivo</small></span></div>
+    <div class="save-log-item ${status === "saved" ? "saved" : status === "pending" ? "pending" : ""}"><span class="save-log-icon">${icon}</span><span><strong>${status === "saved" ? "Guardada en Azure" : status === "pending" ? "Azure pendiente" : "Guardando en Azure…"}</strong><small>${detail || "Sincronizando el resumen de la sesión"}</small></span></div>
+  `;
 }
 
 function persistHistory() {
@@ -572,7 +641,7 @@ function resetLiveWorkout() {
   updateLiveDashboard({
     angle: null,
     coach: state.completedSets >= WORKOUT_SETS
-      ? "Los 4 sets ya están completos. Puedes finalizar el entrenamiento."
+      ? "Las 8 repeticiones ya están completas. Puedes revisar el dashboard."
       : `Set ${currentSetNumber()} listo. Empieza con el brazo extendido y visible.`,
     status: state.liveActive ? "en vivo" : "pose lista",
     statusVariant: state.liveActive ? "active" : "",
@@ -596,6 +665,8 @@ function workoutSummary() {
 
 function renderResultsDashboard(summary) {
   const duration = formatTime(summary.durationSeconds);
+  const history = historyFor(summary);
+  const nextSession = buildNextSession(summary, history);
   els.dashboardSubtitle.textContent = `${summary.reps} repeticiones registradas · ${duration} · técnica analizada en el dispositivo.`;
   els.dashboardMetrics.innerHTML = [
     ["Volumen", `${summary.reps} reps`],
@@ -612,27 +683,33 @@ function renderResultsDashboard(summary) {
     </div>
   `).join("");
 
-  els.nextRoutine.innerHTML = nextArmRoutine.map((item) => `
+  els.nextSessionDate.textContent = `Programada para ${nextSessionDate(summary.completedAt)}`;
+  els.nextSessionGoal.textContent = nextSession.goal;
+  els.nextRoutine.innerHTML = nextSession.exercises.map((item) => `
     <div class="routine-row">
       <span><strong>${item.name}</strong><small>${item.detail}</small></span>
       <em>${item.cue}</em>
     </div>
   `).join("");
+  els.nextSessionNote.textContent = nextSession.note;
   els.recoveryPlan.innerHTML = recoveryPlan.map((item) => `
     <div class="recovery-item"><strong>${item.title}</strong><span>${item.text}</span></div>
   `).join("");
 
-  const history = state.workoutHistory.slice(0, 5);
+  renderProgress(summary, history);
   els.dashboardHistoryCount.textContent = `${history.length} sesiones guardadas`;
-  els.dashboardHistory.innerHTML = history.length ? history.map((item) => `
+  els.dashboardHistory.innerHTML = history.length ? history.slice(0, 5).map((item) => `
     <div class="history-row">
       <span><strong>${formatDate(item.completedAt)}</strong><small>${item.sets}/${WORKOUT_SETS} sets · ${formatTime(item.durationSeconds)}</small></span>
       <span>${item.formScore}% técnica</span>
     </div>
   `).join("") : `<div class="history-row"><span>Esta es tu primera sesión registrada.</span></div>`;
+  renderSaveLog("saving");
+  els.dashboardSyncStatus.textContent = "Guardando en Azure…";
 }
 
 async function saveWorkoutSummaryToAzure(summary) {
+  const nextSession = buildNextSession(summary, historyFor(summary));
   const payload = {
     schema_version: 1,
     type: "curl_workout_summary",
@@ -641,7 +718,7 @@ async function saveWorkoutSummaryToAzure(summary) {
     exercise: "biceps_curl",
     completed_at: summary.completedAt,
     statistics: summary,
-    next_routine: nextArmRoutine,
+    next_session: nextSession,
     recovery_plan: recoveryPlan,
     source: "javier_ai_web",
   };
@@ -700,16 +777,19 @@ function finishWorkout() {
   render();
   els.dashboardSyncStatus.textContent = "Guardando en Azure…";
   els.dashboardSyncStatus.classList.remove("ready", "warning");
+  renderSaveLog("saving");
   saveWorkoutSummaryToAzure(summary)
     .then((blobName) => {
       els.dashboardSyncStatus.textContent = "Guardado en Azure";
       els.dashboardSyncStatus.classList.add("ready");
+      renderSaveLog("saved", `Resumen sincronizado · ${blobName}`);
       els.status.textContent = `Resumen guardado en Azure: ${blobName}`;
     })
     .catch((error) => {
       console.error("Azure summary upload failed", error);
       els.dashboardSyncStatus.textContent = "Azure pendiente";
       els.dashboardSyncStatus.classList.add("warning");
+      renderSaveLog("pending", "Se conserva localmente y se podrá sincronizar al recuperar conexión");
       els.status.textContent = "Dashboard listo; no se pudo guardar en Azure";
     });
   speak("Entrenamiento completado. Tu dashboard y la rutina de brazo siguiente están listos.");
