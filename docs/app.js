@@ -546,7 +546,6 @@ async function loadPoseModel() {
 
   state.poseLoading = true;
   updateLiveDashboard({
-    coach: "Cargando detector de pose. La primera vez puede tardar unos segundos.",
     status: "cargando",
     statusVariant: "warning",
   });
@@ -589,6 +588,12 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
     return;
   }
 
+  const wasAlreadyStarted = Boolean(state.workoutStartedAt);
+  if (!state.sessionIntroSpoken) {
+    // Safari/iOS only reliably allows speech when it starts inside the button gesture.
+    announceSessionBriefing();
+  }
+
   if (!state.stream) {
     await startCamera();
   }
@@ -604,11 +609,12 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
   state.liveTimerInterval = window.setInterval(updateLiveTime, 250);
   els.liveStart.textContent = "Pausar";
   updateLiveDashboard({
-    coach: "Entrenamiento activo. Ponte completo en cuadro y empieza con el brazo abajo.",
     status: "en vivo",
     statusVariant: "active",
   });
-  announceSessionBriefing({ continuation: state.sessionIntroSpoken });
+  if (wasAlreadyStarted && state.sessionIntroSpoken) {
+    announceSessionBriefing({ continuation: true });
+  }
   predictPose();
   if (autoRecord && !state.recording) {
     await startRecording();
@@ -1408,6 +1414,9 @@ els.newSession.addEventListener("click", () => {
 });
 
 els.liveStart.addEventListener("click", () => {
+  if (!state.liveActive && !state.workoutCompleted && !state.sessionIntroSpoken) {
+    announceSessionBriefing();
+  }
   startLiveWorkout().catch((error) => {
     console.error("Live workout failed", error);
     alert(`No pude iniciar entrenamiento en vivo: ${error.message || error}`);
