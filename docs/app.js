@@ -77,6 +77,9 @@ const state = {
   countingEnabled: false,
   countdownActive: false,
   speechRunId: 0,
+  briefingFinished: false,
+  briefingMinimumUntil: 0,
+  countdownTimer: 0,
 };
 
 const els = {
@@ -473,7 +476,7 @@ function spanishVoice() {
     || null;
 }
 
-function speak(text, { force = false, onend = null } = {}) {
+function speak(text, { force = false, onend = null, onerror = null } = {}) {
   if ((!state.voiceEnabled && !force) || !("speechSynthesis" in window)) {
     if (onend) window.setTimeout(onend, 0);
     return null;
@@ -489,7 +492,9 @@ function speak(text, { force = false, onend = null } = {}) {
   utterance.onend = () => {
     if (runId === state.speechRunId && onend) onend();
   };
-  utterance.onerror = utterance.onend;
+  utterance.onerror = () => {
+    if (runId === state.speechRunId && onerror) onerror();
+  };
   window.speechSynthesis.speak(utterance);
   return utterance;
 }
@@ -518,14 +523,28 @@ function announceSessionBriefing({ continuation = false } = {}) {
   els.liveCoach.textContent = visiblePlan;
   setLiveStatus(continuation ? "continuamos" : "briefing", "active");
   state.briefingUntil = Date.now() + (continuation ? 3500 : 9000);
+  state.briefingMinimumUntil = Date.now() + (continuation ? 6000 : 14000);
+  state.briefingFinished = false;
+  window.clearTimeout(state.countdownTimer);
   state.countingEnabled = false;
   state.countdownActive = false;
-  speak(visiblePlan, { onend: startCountdown });
+  speak(visiblePlan, {
+    onend: queueCountdownAfterBriefing,
+    onerror: queueCountdownAfterBriefing,
+  });
   state.sessionIntroSpoken = true;
 }
 
+function queueCountdownAfterBriefing() {
+  if (state.briefingFinished) return;
+  state.briefingFinished = true;
+  const wait = Math.max(0, state.briefingMinimumUntil - Date.now());
+  window.clearTimeout(state.countdownTimer);
+  state.countdownTimer = window.setTimeout(startCountdown, wait);
+}
+
 function startCountdown() {
-  if (state.countdownActive || state.workoutCompleted) return;
+  if (state.countdownActive || state.workoutCompleted || !state.briefingFinished) return;
   state.countdownActive = true;
   state.countingEnabled = false;
   state.lastSpokenRep = 0;
@@ -663,6 +682,8 @@ function stopLiveWorkout(message = "pausado") {
   state.liveActive = false;
   state.countingEnabled = false;
   state.countdownActive = false;
+  state.briefingFinished = false;
+  window.clearTimeout(state.countdownTimer);
   state.speechRunId += 1;
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   window.cancelAnimationFrame(state.liveAnimationFrame);
@@ -703,6 +724,8 @@ function resetLiveWorkout() {
   state.currentSetReps = 0;
   state.countingEnabled = false;
   state.countdownActive = false;
+  state.briefingFinished = false;
+  window.clearTimeout(state.countdownTimer);
   state.curlPhase = "unknown";
   state.setRecorded = false;
   state.lastSpokenRep = 0;
