@@ -53,6 +53,7 @@ const initialWorkoutId = loadActiveWorkoutId(initialWorkoutHistory);
 const state = {
   selectedIndex: 0,
   stream: null,
+  cameraStartPromise: null,
   facingMode: "user",
   recorder: null,
   recorderMimeType: "",
@@ -67,9 +68,13 @@ const state = {
   poseLandmarker: null,
   poseLoading: false,
   poseLoadPromise: null,
+  poseWarmupPromise: null,
+  poseWarmed: false,
+  trackingReadyPromise: null,
   curlQualityModel: null,
   curlQualityLoadPromise: null,
   curlQualityTracker: null,
+  workoutPreparing: false,
   liveActive: false,
   liveStartedAt: 0,
   liveTimerInterval: 0,
@@ -127,6 +132,7 @@ const state = {
   countdownTimer: 0,
   voicePhase: "idle",
   trackingStarted: false,
+  lastInferenceAt: 0,
   autoRecordAfterCountdown: true,
   smoothedAngle: null,
   phaseCandidate: "unknown",
@@ -210,6 +216,7 @@ const poseModelUrl =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
 const poseWasmUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
 const curlQualityModelUrl = "./models/curl-quality-v1.json";
+const POSE_INFERENCE_INTERVAL_MS = 66;
 const armLandmarks = {
   left: { shoulder: 11, elbow: 13, wrist: 15 },
   right: { shoulder: 12, elbow: 14, wrist: 16 },
@@ -466,13 +473,18 @@ function render() {
       : "Grabar set";
   els.record.classList.toggle("stop", state.recording);
   els.dot.classList.toggle("active", state.recording);
-  els.record.disabled = state.workoutCompleted
+  els.record.disabled = state.workoutPreparing
+    || state.workoutCompleted
     || (state.liveActive && !state.countingEnabled)
     || (state.completedSets >= WORKOUT_SETS && state.currentSetReps >= REPS_PER_SET && !state.recording);
-  els.newSession.disabled = state.recording || state.liveActive;
+  els.newSession.disabled = state.workoutPreparing || state.recording || state.liveActive;
   els.cameraStart.hidden = Boolean(state.stream);
-  els.switchCamera.disabled = !state.stream || state.recording;
-  els.liveReset.disabled = state.recording || state.workoutCompleted || state.completedSets >= WORKOUT_SETS;
+  els.liveStart.disabled = state.workoutPreparing;
+  if (state.workoutPreparing) {
+    els.liveStart.textContent = "Preparando IA…";
+  }
+  els.switchCamera.disabled = state.workoutPreparing || !state.stream || state.recording;
+  els.liveReset.disabled = state.workoutPreparing || state.recording || state.workoutCompleted || state.completedSets >= WORKOUT_SETS;
   els.finishWorkout.disabled = !canFinishWorkout() || state.recording || state.workoutCompleted;
   els.finishWorkout.textContent = state.workoutCompleted ? "Entrenamiento finalizado" : "Finalizar entrenamiento";
   setProgressText();
@@ -508,6 +520,16 @@ function render() {
 }
 
 async function startCamera() {
+  if (state.cameraStartPromise) return state.cameraStartPromise;
+  state.cameraStartPromise = openCamera();
+  try {
+    return await state.cameraStartPromise;
+  } finally {
+    state.cameraStartPromise = null;
+  }
+}
+
+async function openCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
     els.status.textContent = "Cámara no compatible";
     updateLiveDashboard({
@@ -530,9 +552,13 @@ async function startCamera() {
     });
     els.preview.srcObject = state.stream;
     await els.preview.play();
+    state.poseWarmed = false;
     resizeOverlay();
     els.status.textContent = state.facingMode === "user" ? "Camara frontal lista" : "Camara trasera lista";
     render();
+    prepareTrackingPipeline({ silent: true }).catch((error) => {
+      console.warn("Background tracking preparation failed", error);
+    });
   } catch (error) {
     els.status.textContent = "No se pudo abrir la camara";
     updateLiveDashboard({
@@ -746,9 +772,19 @@ function announceSessionBriefing({ continuation = false } = {}) {
   const dateLabel = sessionDateLabel();
   const plan = state.activeSessionPlan || defaultSessionPlan(state.sessionNumber);
   const exerciseNames = plan.exercises.slice(0, 3).map((exercise) => exercise.name).join(", ");
-  const visiblePlan = continuation
-    ? `Continuamos con la sesión ${state.sessionNumber}. Completa las repeticiones pendientes de curl con el torso quieto y una bajada controlada.`
-    : `Hola Omar. Sesión ${state.sessionNumber}. Hoy es ${dateLabel} y vamos a trabajar ${plan.focus.toLowerCase()}. Tu rutina incluye ${exerciseNames}. Primero te guiaré en un bloque de ${REPS_PER_SET} repeticiones válidas de curl estricto. Mantén el codo estable, el torso quieto y controla la bajada. Validaré cada repetición cuando vuelvas a extender el brazo; si la técnica falla, no la contaré y te diré qué corregir. Cuando termine este resumen contaré uno, dos, tres. Solo después de tres empezaremos.`;
+  const speechParts = continuation
+    ? [
+      `Continuamos con la sesión ${state.sessionNumber}.`,
+      "Completa las repeticiones pendientes de curl con el torso quieto y una bajada controlada.",
+    ]
+    : [
+      `Hola Omar. Sesión ${state.sessionNumber}. Hoy es ${dateLabel} y vamos a trabajar ${plan.focus.toLowerCase()}.`,
+      `Tu rutina incluye ${exerciseNames}. Primero te guiaré en un bloque de ${REPS_PER_SET} repeticiones válidas de curl estricto.`,
+      "Mantén el codo estable, el torso quieto y controla la bajada.",
+      "Validaré cada repetición cuando vuelvas a extender el brazo. Si la técnica falla, no la contaré y te diré qué corregir.",
+      "Ponte en posición. Enseguida contaré uno, dos, tres, y empezaremos.",
+    ];
+  const visiblePlan = speechParts.join(" ");
   els.liveCoach.textContent = visiblePlan;
   setLiveStatus(continuation ? "continuamos" : "briefing", "active");
   state.briefingUntil = Number.POSITIVE_INFINITY;
@@ -759,21 +795,45 @@ function announceSessionBriefing({ continuation = false } = {}) {
   state.countingEnabled = false;
   state.countdownActive = false;
   clearSpeechQueue();
-  speak(visiblePlan, {
-    onend: queueCountdownAfterBriefing,
-    onerror: queueCountdownAfterBriefing,
-    channel: "sequence",
-    rate: 1.03,
-    pauseAfter: 180,
+  speechParts.forEach((part, index) => {
+    const isLast = index === speechParts.length - 1;
+    speak(part, {
+      onend: isLast ? queueCountdownAfterBriefing : null,
+      onerror: isLast ? queueCountdownAfterBriefing : null,
+      channel: "sequence",
+      rate: 1.04,
+      pauseAfter: isLast ? 80 : 35,
+    });
   });
   state.sessionIntroSpoken = true;
 }
 
-function queueCountdownAfterBriefing() {
+async function queueCountdownAfterBriefing() {
   if (state.briefingFinished) return;
   state.briefingFinished = true;
   window.clearTimeout(state.countdownTimer);
-  state.countdownTimer = window.setTimeout(startCountdown, 250);
+  const readiness = state.trackingReadyPromise || prepareTrackingPipeline({ silent: false });
+  const readinessNotice = window.setTimeout(() => {
+    if (state.voicePhase === "briefing" && state.liveActive) {
+      setLiveStatus("terminando IA", "warning");
+    }
+  }, 350);
+  try {
+    await readiness;
+  } catch (error) {
+    window.clearTimeout(readinessNotice);
+    state.voicePhase = "idle";
+    updateLiveDashboard({
+      coach: "No pude preparar el seguimiento. Revisa internet y pulsa Continuar entrenamiento.",
+      status: "error",
+      statusVariant: "warning",
+    });
+    console.error("Tracking preparation failed", error);
+    return;
+  }
+  window.clearTimeout(readinessNotice);
+  if (!state.liveActive || state.workoutCompleted) return;
+  state.countdownTimer = window.setTimeout(startCountdown, 80);
 }
 
 function startCountdown() {
@@ -788,19 +848,23 @@ function startCountdown() {
     if (activated || !state.liveActive || state.workoutCompleted) return;
     activated = true;
     state.countdownActive = false;
-    state.countingEnabled = true;
     state.voicePhase = "workout";
     state.briefingUntil = 0;
-    els.liveCoach.textContent = "Ahora sí. Empieza extendido; subir y volver a bajar completa una repetición válida.";
-    setLiveStatus("en vivo", "active");
-    startTrackingAfterCountdown().catch((error) => {
-      console.error("Tracking start failed", error);
-      updateLiveDashboard({
-        coach: "No pude iniciar el seguimiento. Pulsa Continuar entrenamiento.",
-        status: "error",
-        statusVariant: "warning",
+    startTrackingAfterCountdown()
+      .then((started) => {
+        if (!started) return;
+        els.liveCoach.textContent = "Ahora sí. Empieza extendido; subir y volver a bajar completa una repetición válida.";
+        setLiveStatus("en vivo", "active");
+      })
+      .catch((error) => {
+        console.error("Tracking start failed", error);
+        state.countingEnabled = false;
+        updateLiveDashboard({
+          coach: "No pude iniciar el seguimiento. Pulsa Continuar entrenamiento.",
+          status: "error",
+          statusVariant: "warning",
+        });
       });
-    });
   };
   els.liveCoach.textContent = "Prepárate. La sesión comienza después de la cuenta atrás.";
   setLiveStatus("preparando", "warning");
@@ -851,15 +915,17 @@ function speakFormCue(message) {
   speak(message, { channel: "coaching", dedupeKey: `form:${message}` });
 }
 
-async function loadPoseModel() {
+async function loadPoseModel({ silent = false } = {}) {
   if (state.poseLandmarker) return state.poseLandmarker;
   if (state.poseLoadPromise) return state.poseLoadPromise;
 
   state.poseLoading = true;
-  updateLiveDashboard({
-    status: "cargando",
-    statusVariant: "warning",
-  });
+  if (!silent) {
+    updateLiveDashboard({
+      status: "cargando",
+      statusVariant: "warning",
+    });
+  }
 
   state.poseLoadPromise = (async () => {
     const vision = await FilesetResolver.forVisionTasks(poseWasmUrl);
@@ -883,16 +949,18 @@ async function loadPoseModel() {
   } catch (error) {
     state.poseLoading = false;
     state.poseLoadPromise = null;
-    updateLiveDashboard({
-      coach: "No pude cargar el detector de pose. Revisa internet y vuelve a intentar.",
-      status: "sin pose",
-      statusVariant: "warning",
-    });
+    if (!silent) {
+      updateLiveDashboard({
+        coach: "No pude cargar el detector de pose. Revisa internet y vuelve a intentar.",
+        status: "sin pose",
+        statusVariant: "warning",
+      });
+    }
     throw error;
   }
 }
 
-async function loadCurlQualityModel() {
+async function loadCurlQualityModel({ silent = false } = {}) {
   if (state.curlQualityModel && state.curlQualityTracker) return state.curlQualityModel;
   if (state.curlQualityLoadPromise) return state.curlQualityLoadPromise;
 
@@ -911,17 +979,75 @@ async function loadCurlQualityModel() {
     state.curlQualityLoadPromise = null;
     state.curlQualityModel = null;
     state.curlQualityTracker = null;
-    updateLiveDashboard({
-      coach: "No pude cargar el modelo de calidad de curl. Revisa la conexión y vuelve a intentar.",
-      status: "sin modelo",
-      statusVariant: "warning",
-    });
+    if (!silent) {
+      updateLiveDashboard({
+        coach: "No pude cargar el modelo de calidad de curl. Revisa la conexión y vuelve a intentar.",
+        status: "sin modelo",
+        statusVariant: "warning",
+      });
+    }
     throw error;
   }
 }
 
+function preloadTrackingModels({ silent = true } = {}) {
+  return Promise.all([
+    loadPoseModel({ silent }),
+    loadCurlQualityModel({ silent }),
+  ]);
+}
+
+function waitForVideoFrame(timeoutMs = 2500) {
+  if (els.preview.readyState >= 2 && els.preview.videoWidth > 0) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ready) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      els.preview.removeEventListener("loadeddata", onLoadedData);
+      resolve(ready);
+    };
+    const onLoadedData = () => finish(true);
+    const timer = window.setTimeout(() => finish(false), timeoutMs);
+    els.preview.addEventListener("loadeddata", onLoadedData, { once: true });
+  });
+}
+
+async function warmPosePipeline({ silent = true } = {}) {
+  if (state.poseWarmed) return true;
+  if (state.poseWarmupPromise) return state.poseWarmupPromise;
+
+  state.poseWarmupPromise = (async () => {
+    await preloadTrackingModels({ silent });
+    if (!state.stream) return false;
+    const frameReady = await waitForVideoFrame();
+    if (!frameReady || !state.stream || !state.poseLandmarker) return false;
+    const timestamp = performance.now();
+    state.poseLandmarker.detectForVideo(els.preview, timestamp);
+    state.poseWarmed = true;
+    state.lastInferenceAt = timestamp;
+    state.lastVideoTime = -1;
+    return true;
+  })();
+
+  try {
+    return await state.poseWarmupPromise;
+  } finally {
+    state.poseWarmupPromise = null;
+  }
+}
+
+async function prepareTrackingPipeline({ silent = true } = {}) {
+  await preloadTrackingModels({ silent });
+  const warmed = await warmPosePipeline({ silent });
+  if (!warmed) throw new Error("La cámara todavía no tiene un cuadro disponible para la IA.");
+  return true;
+}
+
 async function startLiveWorkout({ autoRecord = true } = {}) {
   if (state.workoutCompleted) return;
+  if (state.workoutPreparing) return;
   if (state.liveActive) {
     stopLiveWorkout("pausado");
     return;
@@ -929,50 +1055,67 @@ async function startLiveWorkout({ autoRecord = true } = {}) {
 
   const wasAlreadyStarted = Boolean(state.workoutStartedAt);
   state.autoRecordAfterCountdown = autoRecord;
-
-  if (!state.stream) {
-    await startCamera();
-  }
-  if (!state.stream) return;
-
-  const trackingReady = Promise.all([loadPoseModel(), loadCurlQualityModel()]);
-  state.liveActive = true;
-  if (!state.workoutStartedAt) state.workoutStartedAt = Date.now();
-  if (!state.setStartedAt) state.setStartedAt = Date.now();
-  state.lastVideoTime = -1;
-  state.liveStartedAt = Date.now();
-  window.clearInterval(state.liveTimerInterval);
-  state.liveTimerInterval = window.setInterval(updateLiveTime, 250);
-  els.liveStart.textContent = "Pausar";
+  state.workoutPreparing = true;
   updateLiveDashboard({
-    coach: "Cámara e IA listas. Escucha tu rutina antes de comenzar.",
-    status: "preparando",
+    coach: "Preparando cámara e IA mientras Javier organiza tu rutina.",
+    status: "preparando IA",
     statusVariant: "warning",
   });
-  if (!state.sessionIntroSpoken) {
-    announceSessionBriefing();
-  } else if (wasAlreadyStarted) {
-    announceSessionBriefing({ continuation: true });
+  render();
+
+  try {
+    const modelsReady = preloadTrackingModels({ silent: true });
+    if (!state.stream) await startCamera();
+    if (!state.stream) return;
+
+    state.trackingReadyPromise = modelsReady
+      .catch(() => preloadTrackingModels({ silent: false }))
+      .then(() => prepareTrackingPipeline({ silent: false }));
+    await state.trackingReadyPromise;
+    if (!state.stream || state.workoutCompleted) return;
+
+    state.liveActive = true;
+    if (!state.workoutStartedAt) state.workoutStartedAt = Date.now();
+    if (!state.setStartedAt) state.setStartedAt = Date.now();
+    state.lastVideoTime = -1;
+    state.liveStartedAt = Date.now();
+    window.clearInterval(state.liveTimerInterval);
+    state.liveTimerInterval = window.setInterval(updateLiveTime, 250);
+    els.liveStart.textContent = "Pausar";
+    if (!state.sessionIntroSpoken) {
+      announceSessionBriefing();
+    } else if (wasAlreadyStarted) {
+      announceSessionBriefing({ continuation: true });
+    }
+  } finally {
+    state.workoutPreparing = false;
+    els.liveStart.disabled = false;
+    if (!state.liveActive) {
+      els.liveStart.textContent = state.workoutStartedAt ? "Continuar entrenamiento" : "Empezar entrenamiento";
+    }
+    render();
   }
-  await trackingReady;
 }
 
 async function startTrackingAfterCountdown() {
-  if (!state.liveActive || !state.countingEnabled || state.trackingStarted) return;
-  await Promise.all([loadPoseModel(), loadCurlQualityModel()]);
+  if (!state.liveActive || state.trackingStarted) return false;
+  await (state.trackingReadyPromise || prepareTrackingPipeline({ silent: false }));
   if (
     !state.liveActive
-    || !state.countingEnabled
     || !state.poseLandmarker
     || !state.curlQualityTracker
     || state.trackingStarted
-  ) return;
+  ) return false;
+  state.countingEnabled = true;
   if (state.autoRecordAfterCountdown && !state.recording) {
     await startRecording();
   }
+  if (!state.liveActive || !state.countingEnabled || state.trackingStarted) return false;
   state.trackingStarted = true;
   state.lastVideoTime = -1;
+  state.lastInferenceAt = 0;
   predictPose();
+  return true;
 }
 
 function stopLiveWorkout(message = "pausado") {
@@ -1596,9 +1739,12 @@ function handlePoseResult(result) {
 
 function predictPose() {
   if (!state.liveActive || !state.poseLandmarker) return;
-  if (els.preview.readyState >= 2 && els.preview.currentTime !== state.lastVideoTime) {
+  const now = performance.now();
+  const inferenceDue = now - state.lastInferenceAt >= POSE_INFERENCE_INTERVAL_MS;
+  if (inferenceDue && els.preview.readyState >= 2 && els.preview.currentTime !== state.lastVideoTime) {
     state.lastVideoTime = els.preview.currentTime;
-    const result = state.poseLandmarker.detectForVideo(els.preview, performance.now());
+    state.lastInferenceAt = now;
+    const result = state.poseLandmarker.detectForVideo(els.preview, now);
     handlePoseResult(result);
   }
   state.liveAnimationFrame = window.requestAnimationFrame(predictPose);
@@ -2042,6 +2188,9 @@ els.switchCamera.addEventListener("click", () => {
 els.azureSas.value = containerSasUrl();
 render();
 updateLiveDashboard();
+preloadTrackingModels({ silent: true }).catch((error) => {
+  console.warn("Background model preload failed", error);
+});
 syncWorkoutHistoryFromAzure().catch((error) => {
   console.warn("Azure history is not available yet", error);
 });
