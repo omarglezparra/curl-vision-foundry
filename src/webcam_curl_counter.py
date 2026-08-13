@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import json
+import os
 import platform
 import time
 import uuid
@@ -17,7 +18,9 @@ import mediapipe as mp
 from mediapipe.tasks.python.core.base_options import BaseOptions
 from mediapipe.tasks.python.vision import PoseLandmark, PoseLandmarker, PoseLandmarkerOptions, RunningMode
 import numpy as np
+from dotenv import load_dotenv
 
+from azure_capture_uploader import env_bool, load_azure_capture_config, upload_capture
 from coach_engine import LiveCoach, build_user_profile, coach_message, load_rows
 from curl_rules import CurlSample, CurlTracker, midpoint
 from rep_logger import RepLogger
@@ -292,7 +295,7 @@ def source_timestamp_seconds(source: CaptureSource, started_at: float, frame_ind
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Webcam bicep curl counter using MediaPipe Pose.")
     parser.add_argument("--camera", type=int, default=0, help="Fallback OpenCV camera index when --source is not set.")
-    parser.add_argument("--source", default="", help="OpenCV source: camera index, local video file, or stream URL.")
+    parser.add_argument("--source", default=os.getenv("CAPTURE_SOURCE", ""), help="OpenCV source: camera index, local video file, or stream URL.")
     parser.add_argument("--list-cameras", action="store_true", help="Probe OpenCV camera indexes, then exit.")
     parser.add_argument("--max-camera-index", type=int, default=8, help="Highest camera index to probe with --list-cameras.")
     parser.add_argument("--headless", action="store_true", help="Process without opening a preview window.")
@@ -300,14 +303,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--arm", choices=["auto", "left", "right"], default="auto", help="Arm to track.")
     parser.add_argument("--calibrate", action="store_true", help="Show framing guidance before collecting data.")
     parser.add_argument("--session", default="", help="Session id saved with each logged rep.")
-    parser.add_argument("--label", default="unlabeled", help="Training label saved with each logged rep.")
+    parser.add_argument("--label", default=os.getenv("CAPTURE_LABEL", "unlabeled"), help="Training label saved with each logged rep.")
     parser.add_argument("--no-log", action="store_true", help="Disable CSV logging.")
     parser.add_argument("--log-good-only", action="store_true", help="Only write reps scored as good form to the CSV.")
-    parser.add_argument("--log-path", default="outputs/curl_reps.csv", help="CSV path for logged rep metrics.")
+    parser.add_argument("--log-path", default=os.getenv("CAPTURE_LOG_PATH", "outputs/curl_reps.csv"), help="CSV path for logged rep metrics.")
     parser.add_argument("--record-session", action="store_true", help="Save the full webcam session video plus metadata.")
-    parser.add_argument("--video-output-dir", default="outputs/session_videos", help="Directory for recorded session videos.")
-    parser.add_argument("--camera-angle", default="webcam", help="Camera angle saved in recording metadata.")
-    parser.add_argument("--exercise", default="biceps_curl", help="Exercise name saved in recording metadata.")
+    parser.add_argument(
+        "--upload-azure",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Upload video, metadata, and rep data to Azure after recording (defaults to AZURE_AUTO_UPLOAD).",
+    )
+    parser.add_argument("--video-output-dir", default=os.getenv("CAPTURE_VIDEO_DIR", "outputs/session_videos"), help="Directory for recorded session videos.")
+    parser.add_argument("--camera-angle", default=os.getenv("CAPTURE_CAMERA_ANGLE", "front"), help="Camera angle saved in recording metadata.")
+    parser.add_argument("--exercise", default=os.getenv("CAPTURE_EXERCISE", "biceps_curl"), help="Exercise name saved in recording metadata.")
     parser.add_argument("--voice-coach", action="store_true", help="Speak live coach feedback after each counted rep.")
     parser.add_argument("--voice-rate", type=int, default=175, help="Text-to-speech words per minute.")
     parser.add_argument("--model-path", default="outputs/models/pose_landmarker_lite.task", help="Path to MediaPipe pose model.")
@@ -315,6 +324,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    load_dotenv()
     args = parse_args()
     if args.list_cameras:
         list_cameras(args.max_camera_index)
@@ -341,6 +351,7 @@ def main() -> int:
     video_writer = None
     recording_fps = 0.0
     frames_recorded = 0
+    upload_failed = False
     last_coach_rep = None
     profile_rows = load_rows(Path(args.log_path)) if Path(args.log_path).exists() else []
     live_coach = LiveCoach(build_user_profile(profile_rows))
@@ -387,8 +398,8 @@ def main() -> int:
                 if not args.no_flip:
                     frame = cv2.flip(frame, 1)
                 height, width = frame.shape[:2]
-                recording_frame = frame.copy()
                 if args.record_session:
+                    recording_frame = frame.copy()
                     if video_writer is None:
                         recording_dir.mkdir(parents=True, exist_ok=True)
                         recording_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -440,8 +451,12 @@ def main() -> int:
                     if logger and update.last_metrics:
                         if not args.log_good_only or update.last_metrics.quality.good_form:
                             logger.log(update.last_metrics, selected_side, coach_rep=coach_rep)
-                    draw_arm(frame, shoulder, elbow, wrist)
-                    cv2.putText(frame, f"{angle:.0f}", elbow, cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    if not args.headless:
+                        draw_arm(frame, shoulder, elbow, wrist)
+                        cv2.putText(frame, f"{angle:.0f}", elbow, cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
+                if args.headless:
+                    continue
 
                 draw_hud(
                     frame,
@@ -455,8 +470,6 @@ def main() -> int:
                 )
                 if args.calibrate:
                     draw_calibration(frame, is_ready, messages)
-                if args.headless:
-                    continue
 
                 cv2.imshow("Curl Vision Foundry - Webcam Curl Counter", frame)
                 key = cv2.waitKey(10) & 0xFF
@@ -489,25 +502,58 @@ def main() -> int:
                 "frames_recorded": frames_recorded,
                 "fps": recording_fps,
                 "selected_arm": selected_side,
+                "attempts_detected": tracker.attempts,
+                "reps_detected": tracker.reps,
                 "source": "webcam_curl_counter",
                 "source_type": source.kind,
                 "input_source": source.label,
                 "mirrored_input": not args.no_flip,
                 "training_intent": "good_form_only" if args.log_good_only or args.label == "good_form" else "mixed",
-                "use_for_training": args.exercise == "biceps_curl" and args.label == "good_form",
+                "use_for_training": (
+                    args.exercise == "biceps_curl"
+                    and args.label == "good_form"
+                    and args.log_good_only
+                ),
                 "video_file": video_path.name,
                 "log_path": str(args.log_path) if logger else "",
+                "glasses_vendor": os.getenv("GLASSES_VENDOR", ""),
+                "glasses_model": os.getenv("GLASSES_MODEL", ""),
+                "glasses_alias": os.getenv("GLASSES_ALIAS", ""),
             }
+            if logger:
+                rep_data_path = recording_dir / "reps.csv"
+                metadata["rep_rows_saved"] = logger.export_session(rep_data_path)
+                metadata["rep_data_file"] = rep_data_path.name
             metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
             print(f"Recorded {frames_recorded} frames to {video_path}")
             print(f"Wrote recording metadata to {metadata_path}")
-        voice.close()
 
-    cap.release()
-    if not args.headless:
-        cv2.destroyAllWindows()
+            should_upload = args.upload_azure
+            if should_upload is None:
+                should_upload = env_bool("AZURE_AUTO_UPLOAD", default=False)
+            if should_upload:
+                azure_config = load_azure_capture_config()
+                if not azure_config.configured:
+                    print("[Azure] Upload skipped: set AZURE_STORAGE_ACCOUNT_NAME in .env.")
+                else:
+                    try:
+                        result = upload_capture(video_path, metadata_path, config=azure_config)
+                        print(f"[Azure] Uploaded recording to {result['video_blob']}")
+                        print(f"[Azure] Registered manifest {result['manifest_blob']}")
+                    except Exception as exc:
+                        upload_failed = True
+                        failed_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                        failed_metadata["upload_status"] = "failed"
+                        failed_metadata["upload_error"] = f"{type(exc).__name__}: {exc}"
+                        metadata_path.write_text(json.dumps(failed_metadata, indent=2), encoding="utf-8")
+                        print(f"[Azure] Upload failed; local files are safe: {exc}")
+        voice.close()
+        cap.release()
+        if not args.headless:
+            cv2.destroyAllWindows()
+
     print(f"Session complete: source={source.label} attempts={tracker.attempts} reps={tracker.reps}")
-    return 0
+    return 2 if upload_failed else 0
 
 
 if __name__ == "__main__":

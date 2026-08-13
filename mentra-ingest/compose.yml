@@ -1,0 +1,21 @@
+services:
+  ingest:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RECORDINGS_ROOT: /recordings
+      INGEST_HEALTHCHECK_MODE: rtmp
+      INGEST_HEALTHCHECK_PORT: "1935"
+      FAILED_SEGMENT_RETENTION_SECONDS: ${FAILED_SEGMENT_RETENTION_SECONDS:-86400}
+      RETRY_WORKER_HEARTBEAT_PATH: /recordings/.retry-worker-heartbeat
+      RETRY_WORKER_HEALTH_MAX_AGE_SECONDS: ${RETRY_WORKER_HEALTH_MAX_AGE_SECONDS:-300}
+    ports:
+      - "1935:1935"
+    volumes:
+      - mentra_recordings:/recordings
+
+volumes:
+  mentra_recordings:

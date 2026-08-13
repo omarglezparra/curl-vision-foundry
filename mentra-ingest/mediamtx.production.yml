@@ -1,0 +1,38 @@
+logLevel: warn
+logDestinations: [stdout]
+logStructured: true
+
+authMethod: http
+authHTTPAddress: http://127.0.0.1:9080/auth
+authHTTPExclude: []
+
+api: false
+metrics: false
+pprof: false
+playback: false
+rtsp: false
+hls: false
+webrtc: false
+srt: false
+moq: false
+
+rtmp: true
+rtmpEncryption: "strict"
+rtmpsAddress: :1936
+rtmpServerKey: /certs/server.key
+rtmpServerCert: /certs/server.crt
+
+pathDefaults:
+  source: publisher
+  overridePublisher: false
+  record: true
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordMaxPartSize: 50M
+  recordSegmentDuration: 2m
+  recordDeleteAfter: 0s
+  runOnRecordSegmentComplete: python3 /app/upload_segment.py "$MTX_PATH" "$MTX_SEGMENT_PATH" "$MTX_SEGMENT_DURATION"
+
+paths:
+  all_others:

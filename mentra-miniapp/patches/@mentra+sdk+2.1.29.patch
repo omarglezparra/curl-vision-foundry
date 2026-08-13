@@ -1,0 +1,307 @@
+diff --git a/node_modules/@mentra/sdk/dist/index.js b/node_modules/@mentra/sdk/dist/index.js
+index 3c92832..c5917bb 100644
+--- a/node_modules/@mentra/sdk/dist/index.js
++++ b/node_modules/@mentra/sdk/dist/index.js
+@@ -2215,9 +2215,9 @@ class ApiClient {
+ import pino from "pino";
+ var BETTERSTACK_SOURCE_TOKEN = process.env.BETTERSTACK_SOURCE_TOKEN;
+ var BETTERSTACK_ENDPOINT = process.env.BETTERSTACK_ENDPOINT || "https://s1311181.eu-nbg-2.betterstackdata.com";
+-var NODE_ENV = "aryan";
++var NODE_ENV = process.env.NODE_ENV || "development";
+ var PORTER_APP_NAME = process.env.PORTER_APP_NAME || "cloud-local";
+-var LOG_LEVEL = NODE_ENV === "production" ? "info" : "debug";
++var LOG_LEVEL = NODE_ENV === "production" ? "warn" : "debug";
+ var streams2 = [];
+ var prettyTransport = pino.transport({
+   target: "pino-pretty",
+@@ -2738,16 +2738,13 @@ class CameraModule {
+     return 0;
+   }
+   async startStream(options) {
+-    this.logger.info({ rtmpUrl: options.rtmpUrl }, `\uD83D\uDCF9 RTMP stream request starting`);
++    this.logger.info(`\uD83D\uDCF9 RTMP stream request starting`);
+     cameraWarnLog(this.session.getHttpsServerUrl?.(), this.packageName, "startStream");
+     if (!options.rtmpUrl) {
+       throw new Error("rtmpUrl is required");
+     }
+     if (this.isStreaming) {
+-      this.logger.error({
+-        currentStreamUrl: this.currentStreamUrl,
+-        requestedUrl: options.rtmpUrl
+-      }, `\uD83D\uDCF9 Already streaming error`);
++      this.logger.error(`\uD83D\uDCF9 Already streaming error`);
+       throw new Error("Already streaming. Stop the current stream before starting a new one.");
+     }
+     const message = {
+@@ -2764,19 +2761,16 @@ class CameraModule {
+     try {
+       this.session.sendMessage(message);
+       this.isStreaming = true;
+-      this.logger.info({ rtmpUrl: options.rtmpUrl }, `\uD83D\uDCF9 RTMP stream request sent successfully`);
++      this.logger.info(`\uD83D\uDCF9 RTMP stream request sent successfully`);
+       return Promise.resolve();
+     } catch (error) {
+-      this.logger.error({ error, rtmpUrl: options.rtmpUrl }, `\uD83D\uDCF9 Failed to send RTMP stream request`);
++      this.logger.error({ error }, `\uD83D\uDCF9 Failed to send RTMP stream request`);
+       const errorMessage = error instanceof Error ? error.message : String(error);
+       return Promise.reject(`Failed to request RTMP stream: ${errorMessage}`);
+     }
+   }
+   async stopStream() {
+-    this.logger.info({
+-      isCurrentlyStreaming: this.isStreaming,
+-      currentStreamUrl: this.currentStreamUrl
+-    }, `\uD83D\uDCF9 RTMP stream stop request`);
++    this.logger.info({ isCurrentlyStreaming: this.isStreaming }, `\uD83D\uDCF9 RTMP stream stop request`);
+     if (!this.isStreaming) {
+       this.logger.info(`\uD83D\uDCF9 Not streaming - no-op`);
+       return Promise.resolve();
+@@ -3707,22 +3701,22 @@ class AppSession {
+         if (!["ws:", "wss:"].includes(url.protocol)) {
+           const fixedUrl = this.config.mentraOSWebsocketUrl.replace(/^ws:\/\/http:\/\//, "ws://");
+           this.config.mentraOSWebsocketUrl = fixedUrl;
+-          this.logger.warn(`⚠️ [${this.config.packageName}] Fixed malformed WebSocket URL: ${fixedUrl}`);
++          this.logger.warn(`⚠️ [${this.config.packageName}] Fixed malformed WebSocket URL.`);
+         }
+       } catch (error) {
+-        this.logger.error(error, `⚠️ [${this.config.packageName}] Invalid WebSocket URL format: ${this.config.mentraOSWebsocketUrl}`);
++        this.logger.error(error, `⚠️ [${this.config.packageName}] Invalid WebSocket URL format.`);
+       }
+     }
+     this.logger.debug(`\uD83D\uDE80 [${this.config.packageName}] App Session initialized`);
+-    this.logger.debug(`\uD83D\uDE80 [${this.config.packageName}] WebSocket URL: ${this.config.mentraOSWebsocketUrl}`);
++    this.logger.debug(`\uD83D\uDE80 [${this.config.packageName}] WebSocket URL configured.`);
+     if (this.config.mentraOSWebsocketUrl) {
+       try {
+         const url = new URL(this.config.mentraOSWebsocketUrl);
+         if (!["ws:", "wss:"].includes(url.protocol)) {
+-          this.logger.error({ config: this.config }, `⚠️ [${this.config.packageName}] Invalid WebSocket URL protocol: ${url.protocol}. Should be ws: or wss:`);
++          this.logger.error(`⚠️ [${this.config.packageName}] Invalid WebSocket URL protocol.`);
+         }
+       } catch (error) {
+-        this.logger.error(error, `⚠️ [${this.config.packageName}] Invalid WebSocket URL format: ${this.config.mentraOSWebsocketUrl}`);
++        this.logger.error(error, `⚠️ [${this.config.packageName}] Invalid WebSocket URL format.`);
+       }
+     }
+     this.events = new EventManager(this.subscribe.bind(this), this.unsubscribe.bind(this), this.config.packageName, this.getHttpsServerUrl() || "");
+@@ -4007,11 +4001,7 @@ class AppSession {
+         this.resources.track(connectedCleanup);
+         const timeoutMs = 5000;
+         const connectionTimeout = this.resources.setTimeout(() => {
+-          this.logger.error({
+-            config: this.config,
+-            sessionId: this.sessionId,
+-            timeoutMs
+-          }, `⏱️⏱️⏱️ [${this.config.packageName}] Connection timeout after ${timeoutMs}ms`);
++          this.logger.error({ timeoutMs }, `⏱️⏱️⏱️ [${this.config.packageName}] Connection timeout after ${timeoutMs}ms`);
+           this.events.emit("error", new Error(`Connection timeout after ${timeoutMs}ms`));
+           reject(new Error("Connection timeout"));
+         }, timeoutMs);
+@@ -4633,7 +4623,7 @@ class AppSession {
+       const userList = await this.discoverAppUsers("", false);
+       return userList.users.some((user) => user.userId === userId);
+     } catch (error) {
+-      this.logger.error({ error, userId }, "Error checking if user is active");
++      this.logger.error({ error }, "Error checking if user is active");
+       return false;
+     }
+   }
+@@ -4818,13 +4808,13 @@ function verifySession(token2, secret, maxAge) {
+     const [userId, timestampStr, signature] = parts;
+     const timestamp = parseInt(timestampStr, 10);
+     if (maxAge && Date.now() - timestamp > maxAge) {
+-      console.log(`Session token expired: ${token2}.  Parsed date is ${timestamp}, meaning age is ${Date.now() - timestamp}, but maxAge is ${maxAge}`);
++      console.warn("Session token expired.");
+       return null;
+     }
+     const data = `${userId}|${timestamp}`;
+     const expectedSignature = crypto.createHmac("sha256", secret).update(data).digest("hex");
+     if (signature !== expectedSignature) {
+-      console.log(`Session token signature mismatch: ${signature} !== ${expectedSignature}`);
++      console.warn("Session token signature mismatch.");
+       return null;
+     }
+     return userId;
+@@ -4884,7 +4874,7 @@ function createAuthMiddleware(options) {
+     getAppSessionForUser,
+     cookieOptions = {
+       httpOnly: true,
+-      secure: false,
++      secure: NODE_ENV === "production",
+       maxAge: 30 * 24 * 60 * 60 * 1000,
+       sameSite: "lax",
+       path: "/"
+@@ -5028,6 +5018,54 @@ var newSDKUpdate = (versionNumb) => {
+ // src/app/server/index.ts
+ import axios3 from "axios";
+ var GIVE_APP_CONTROL_OF_TOOL_RESPONSE = "GIVE_APP_CONTROL_OF_TOOL_RESPONSE";
++var WEBHOOK_MAX_CLOCK_SKEW_MS = 5 * 60 * 1e3;
++var WEBHOOK_RATE_WINDOW_MS = 60 * 1e3;
++var WEBHOOK_RATE_LIMIT = 300;
++function configuredMentraWebsocketHosts() {
++  return new Set((process.env.MENTRA_WEBSOCKET_ALLOWED_HOSTS || "").split(",").map((host) => host.trim().toLowerCase()).filter(Boolean));
++}
++function safeWebhookIdentifier(value, maximumLength) {
++  return typeof value === "string" && value.length > 0 && value.length <= maximumLength && !/[\u0000-\u001f\u007f]/.test(value);
++}
++function validatedMentraWebsocketHost(value, expectedPath) {
++  if (typeof value !== "string" || value.length > 2048) return null;
++  let url;
++  try {
++    url = new URL(value);
++  } catch {
++    return null;
++  }
++  const hostname = url.hostname.toLowerCase();
++  const production = (process.env.NODE_ENV || "development") === "production";
++  const localDevelopmentHost = !production && ["localhost", "127.0.0.1", "::1"].includes(hostname);
++  const allowedProtocol = url.protocol === "wss:" || localDevelopmentHost && url.protocol === "ws:";
++  const allowedPort = production ? !url.port || url.port === "443" : true;
++  const allowedHost = configuredMentraWebsocketHosts().has(hostname) || localDevelopmentHost;
++  if (!allowedProtocol || !allowedPort || !allowedHost || url.pathname !== expectedPath) return null;
++  if (url.username || url.password || url.search || url.hash) return null;
++  return hostname;
++}
++function validWebhookEnvelope(request) {
++  if (!request || typeof request !== "object") return false;
++  if (!safeWebhookIdentifier(request.sessionId, 256) || !safeWebhookIdentifier(request.userId, 320)) return false;
++  const timestamp = Date.parse(request.timestamp);
++  return Number.isFinite(timestamp) && Math.abs(Date.now() - timestamp) <= WEBHOOK_MAX_CLOCK_SKEW_MS;
++}
++function validSessionWebhook(request) {
++  if (!validWebhookEnvelope(request)) return false;
++  const fields = [
++    ["websocketUrl", "/ws/miniapp"],
++    ["mentraOSWebsocketUrl", "/app-ws"],
++    ["augmentOSWebsocketUrl", "/app-ws"]
++  ];
++  const present = fields.filter(([name]) => request[name] !== void 0 && request[name] !== null && request[name] !== "");
++  if (!present.some(([name]) => name !== "websocketUrl")) return false;
++  const hosts = present.map(([name, path3]) => validatedMentraWebsocketHost(request[name], path3));
++  return hosts.every(Boolean) && new Set(hosts).size === 1;
++}
++function sdkEndpointDisabled() {
++  return (process.env.NODE_ENV || "development") === "production" || (process.env.MENTRA_DISABLE_UNUSED_ENDPOINTS || "").toLowerCase() === "true";
++}
+ 
+ class AppServer {
+   config;
+@@ -5155,12 +5193,41 @@ class AppServer {
+       this.logger.error("❌ Webhook path not set");
+       throw new Error("Webhook path not set");
+     }
++    const recentRequests = /* @__PURE__ */ new Map();
+     this.app.post(this.config.webhookPath, async (req, res) => {
+       try {
++        const now = Date.now();
++        const clientKey = req.socket?.remoteAddress || "unknown";
++        const prior = (recentRequests.get(clientKey) || []).filter((timestamp) => now - timestamp < WEBHOOK_RATE_WINDOW_MS);
++        if (prior.length >= WEBHOOK_RATE_LIMIT) {
++          res.status(429).json({ status: "error", message: "Too many webhook requests" });
++          return;
++        }
++        prior.push(now);
++        recentRequests.set(clientKey, prior);
++        if (recentRequests.size > 1e3) {
++          for (const [key, timestamps] of recentRequests) {
++            if (!timestamps.some((timestamp) => now - timestamp < WEBHOOK_RATE_WINDOW_MS)) recentRequests.delete(key);
++          }
++        }
+         const webhookRequest = req.body;
++        if (!webhookRequest || typeof webhookRequest !== "object") {
++          res.status(400).json({ status: "error", message: "Invalid webhook body" });
++          return;
++        }
+         if (webhookRequest.type === "session_request" /* SESSION_REQUEST */) {
++          if (!validSessionWebhook(webhookRequest)) {
++            this.logger.warn("Rejected an invalid session webhook.");
++            res.status(400).json({ status: "error", message: "Invalid session webhook" });
++            return;
++          }
+           await this.handleSessionRequest(webhookRequest, res);
+         } else if (webhookRequest.type === "stop_request" /* STOP_REQUEST */) {
++          if (!validWebhookEnvelope(webhookRequest)) {
++            this.logger.warn("Rejected an invalid stop webhook.");
++            res.status(400).json({ status: "error", message: "Invalid stop webhook" });
++            return;
++          }
+           await this.handleStopRequest(webhookRequest, res);
+         } else {
+           this.logger.error("❌ Unknown webhook request type");
+@@ -5170,15 +5237,16 @@ class AppServer {
+           });
+         }
+       } catch (error) {
+-        this.logger.error(error, "❌ Error handling webhook: " + error.message);
++        this.logger.error(error, "❌ Error handling webhook");
+         res.status(500).json({
+           status: "error",
+-          message: "Error handling webhook: " + error.message
++          message: "Error handling webhook"
+         });
+       }
+     });
+   }
+   setupToolCallEndpoint() {
++    if (sdkEndpointDisabled()) return;
+     this.app.post("/tool", async (req, res) => {
+       try {
+         const toolCall = req.body;
+@@ -5217,12 +5285,12 @@ class AppServer {
+       try {
+         await existingSession.releaseOwnership("switching_clouds");
+       } catch (error) {
+-        this.logger.warn({ error, sessionId }, `⚠️ Failed to send OWNERSHIP_RELEASE to old session - continuing anyway`);
++        this.logger.warn({ error }, `⚠️ Failed to send OWNERSHIP_RELEASE to old session - continuing anyway`);
+       }
+       try {
+         existingSession.disconnect();
+       } catch (error) {
+-        this.logger.warn({ error, sessionId }, `⚠️ Failed to disconnect old session - continuing anyway`);
++        this.logger.warn({ error }, `⚠️ Failed to disconnect old session - continuing anyway`);
+       }
+       this.activeSessions.delete(sessionId);
+       this.activeSessionsByUserId.delete(userId);
+@@ -5280,7 +5348,7 @@ class AppServer {
+       }
+     });
+     const cleanupError = session.events.onError((error) => {
+-      this.logger.error(error, `❌ [Session ${sessionId}] Error:`);
++      this.logger.error(error, `❌ Session error:`);
+     });
+     try {
+       await session.connect(sessionId);
+@@ -5328,6 +5396,7 @@ class AppServer {
+     }
+   }
+   setupSettingsEndpoint() {
++    if (sdkEndpointDisabled()) return;
+     this.app.post("/settings", async (req, res) => {
+       try {
+         const { userIdForSettings, settings } = req.body;
+@@ -5345,7 +5414,7 @@ class AppServer {
+           }
+         });
+         if (userSessions.length === 0) {
+-          this.logger.warn(`⚠️ No active sessions found for user ${userIdForSettings}`);
++          this.logger.warn(`⚠️ No active sessions found for settings update.`);
+         } else {
+           this.logger.info(`\uD83D\uDD04 Updating settings for ${userSessions.length} active sessions`);
+         }
+@@ -5389,7 +5458,7 @@ class AppServer {
+           releaseOwnership: false
+         });
+       } catch (error) {
+-        this.logger.error(error, `Error during cleanup of session ${sessionId}`);
++        this.logger.error(error, `Error during session cleanup`);
+         try {
+           await session.disconnect();
+         } catch {}
+@@ -5400,6 +5469,7 @@ class AppServer {
+     this.cleanupHandlers.forEach((handler) => handler());
+   }
+   setupPhotoUploadEndpoint() {
++    if (sdkEndpointDisabled()) return;
+     const multer = __require("multer");
+     const upload = multer({
+       storage: multer.memoryStorage(),

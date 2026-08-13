@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AI Javier Coach · Performance preview</title>
+    <link rel="stylesheet" href="../../public/styles.css" />
+    <link rel="stylesheet" href="preview.css" />
+  </head>
+  <body>
+    <div class="preview-frame">
+    <main>
+      <header>
+        <p class="kicker">Mentra Live · ml1</p>
+        <h1>AI Javier Coach</h1>
+        <p class="lede">Graba una sesión continua y revisa tu técnica de curls.</p>
+      </header>
+      <nav aria-label="Secciones">
+        <button class="tab">Entrenar</button><button class="tab active">Rendimiento</button>
+      </nav>
+      <section class="panel active">
+        <div class="section-heading">
+          <div><h2>Tu rendimiento</h2><p>Sesiones continuas procesadas en Azure</p></div>
+          <button class="small">Actualizar</button>
+        </div>
+        <div id="metrics" class="metrics">
+          <article><strong>8</strong><span>Sesiones</span></article>
+          <article><strong>184</strong><span>Reps</span></article>
+          <article><strong>88%</strong><span>Buena forma</span></article>
+          <article><strong>117°</strong><span>ROM promedio</span></article>
+        </div>
+        <div id="sessions">
+          <article class="session"><div><strong>Sesión de hoy</strong><b>94%</b></div><p>26 reps · 24 limpias · ROM 121°</p></article>
+          <article class="session"><div><strong>Sesión anterior</strong><b>89%</b></div><p>24 reps · 21 limpias · ROM 118°</p></article>
+          <article class="session"><div><strong>Hace 3 días</strong><b>83%</b></div><p>22 reps · 18 limpias · ROM 112°</p></article>
+        </div>
+      </section>
+      <p id="error"></p>
+    </main>
+    </div>
+  </body>
+</html>

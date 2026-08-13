@@ -1,7 +1,19 @@
 .venv/
+node_modules/
+dist/
+.expo/
 __pycache__/
 *.pyc
+*.log
 .env
+mobile/.env
+mentra-miniapp/.env
+mentra-ingest/.env
+mentra-ingest/certs/
+mentra-ingest/recordings/
+mentra-miniapp/store/.edge-*/
+mentra-miniapp/store/previews/*-source.png
+mentra-miniapp/store/previews/*-thumb.png
 outputs/
 test-results/
 mlruns/
@@ -12,3 +24,7 @@ training-videos/**/*.webm
 training-videos/**/_preview_frames/
 training-videos/**/*-preview.jpg
 .azure/
+.azure-validation/
+azure/functions/local.settings.json
+*.p8
+*.pem

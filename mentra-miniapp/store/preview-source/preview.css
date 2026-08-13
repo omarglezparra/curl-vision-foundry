@@ -1,0 +1,10 @@
+html, body { background: #edf2f5; height: 1920px; overflow: hidden; width: 1080px; }
+.preview-frame {
+  background: linear-gradient(180deg, #101820 0 255px, #edf2f5 255px);
+  min-height: 768px;
+  transform: scale(2.5);
+  transform-origin: left top;
+  width: 432px;
+}
+.preview-frame main { margin: 0; width: 100%; }
+

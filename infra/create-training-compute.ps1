@@ -1,8 +1,13 @@
 param(
+    [switch]$ConfirmAzureSpend,
     [string]$SubscriptionId = "YOUR_SUBSCRIPTION_ID",
     [string]$ResourceGroup = "rg-curl-vision-trainer",
     [string]$WorkspaceName = "YOUR_AZURE_ML_WORKSPACE_NAME"
 )
+
+if (-not $ConfirmAzureSpend) {
+  throw "No resources were created. Rerun with -ConfirmAzureSpend only after approving Azure ML compute charges."
+}
 
 az account set --subscription $SubscriptionId
 

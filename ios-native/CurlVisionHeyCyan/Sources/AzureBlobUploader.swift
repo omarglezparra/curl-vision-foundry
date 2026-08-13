@@ -14,7 +14,10 @@ final class AzureBlobUploader: ObservableObject {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let metadataData = try encoder.encode(metadata)
-        let videoData = try Data(contentsOf: clip.localURL)
+        let localURL = clip.localURL
+        let videoData = try await Task.detached(priority: .userInitiated) {
+            try Data(contentsOf: localURL)
+        }.value
 
         appendLog("Uploading video \(metadata.video_blob)")
         try await putBlob(name: metadata.video_blob, data: videoData, contentType: metadata.video_mime_type)

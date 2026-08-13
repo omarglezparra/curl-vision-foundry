@@ -83,15 +83,11 @@ const state = {
   currentSetReps: 0,
   totalReps: 0,
   targetReps: REPS_PER_SET,
-  curlPhase: "unknown",
   selectedArm: "auto",
   voiceEnabled: true,
   lastSpokenRep: 0,
-  lastMotivationAt: 0,
   lastSpokenCue: "",
   lastCueAt: 0,
-  briefingUntil: 0,
-  torsoAnchorX: null,
   completedSets: 0,
   setRecorded: false,
   workoutStartedAt: 0,
@@ -108,7 +104,6 @@ const state = {
   rejectionReasons: {},
   qualityScores: [],
   setQualityScores: [],
-  lastFormWarning: "",
   angleSamples: [],
   setHistory: [],
   workoutHistory: initialWorkoutHistory,
@@ -128,16 +123,12 @@ const state = {
   activeUtterance: null,
   activeSpeechItem: null,
   briefingFinished: false,
-  briefingMinimumUntil: 0,
   countdownTimer: 0,
   voicePhase: "idle",
   trackingStarted: false,
   lastInferenceAt: 0,
   autoRecordAfterCountdown: true,
   smoothedAngle: null,
-  phaseCandidate: "unknown",
-  phaseCandidateFrames: 0,
-  lastRepAt: 0,
   currentDashboardSummary: null,
 };
 
@@ -752,10 +743,6 @@ function speak(text, {
   return item;
 }
 
-function capitalized(value) {
-  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
-}
-
 function sessionDateLabel() {
   try {
     return new Intl.DateTimeFormat("es-MX", {
@@ -787,8 +774,6 @@ function announceSessionBriefing({ continuation = false } = {}) {
   const visiblePlan = speechParts.join(" ");
   els.liveCoach.textContent = visiblePlan;
   setLiveStatus(continuation ? "continuamos" : "briefing", "active");
-  state.briefingUntil = Number.POSITIVE_INFINITY;
-  state.briefingMinimumUntil = 0;
   state.briefingFinished = false;
   state.voicePhase = "briefing";
   window.clearTimeout(state.countdownTimer);
@@ -849,7 +834,6 @@ function startCountdown() {
     activated = true;
     state.countdownActive = false;
     state.voicePhase = "workout";
-    state.briefingUntil = 0;
     startTrackingAfterCountdown()
       .then((started) => {
         if (!started) return;
@@ -894,25 +878,6 @@ function announceRep({ onComplete = null } = {}) {
     onend: isComplete ? onComplete : null,
     onerror: isComplete ? onComplete : null,
   });
-}
-
-function motivate() {
-  const now = Date.now();
-  if (state.currentSetReps === 0 || now - state.lastMotivationAt < 22000) return;
-  state.lastMotivationAt = now;
-  speak(state.currentSetReps >= state.targetReps - 2
-    ? "Muy bien. Las últimas cuentan; aprieta y controla la bajada."
-    : "Buen ritmo. Mantén el torso quieto y sigue fuerte.", { channel: "coaching", dedupeKey: "motivation" });
-}
-
-function speakFormCue(message) {
-  const now = Date.now();
-  if (!state.countingEnabled) return;
-  if (now < state.briefingUntil) return;
-  if (now - state.lastCueAt < 8000 || message === state.lastSpokenCue) return;
-  state.lastCueAt = now;
-  state.lastSpokenCue = message;
-  speak(message, { channel: "coaching", dedupeKey: `form:${message}` });
 }
 
 async function loadPoseModel({ silent = false } = {}) {
@@ -1174,25 +1139,17 @@ function resetLiveWorkout() {
   state.briefingFinished = false;
   state.voicePhase = "idle";
   window.clearTimeout(state.countdownTimer);
-  state.curlPhase = "unknown";
   state.setRecorded = false;
   state.lastSpokenRep = 0;
-  state.lastMotivationAt = 0;
   state.lastSpokenCue = "";
   state.lastCueAt = 0;
-  state.briefingUntil = 0;
-  state.torsoAnchorX = null;
   state.setStartedAt = state.liveActive ? Date.now() : 0;
   state.setAngles = [];
   state.setWarnings = 0;
   state.setAttemptedReps = 0;
   state.setRejectedReps = 0;
   state.setQualityScores = [];
-  state.lastFormWarning = "";
   state.smoothedAngle = null;
-  state.phaseCandidate = "unknown";
-  state.phaseCandidateFrames = 0;
-  state.lastRepAt = 0;
   state.curlQualityTracker?.reset();
   clearSpeechQueue();
   state.liveStartedAt = state.liveActive ? Date.now() : 0;
@@ -1519,8 +1476,6 @@ function registerAcceptedCurl(quality) {
   state.totalReps += 1;
   state.currentSetReps += 1;
   state.goodReps += 1;
-  state.lastRepAt = Date.now();
-  state.lastFormWarning = "";
   state.qualityScores.push(quality.qualityScore);
   state.setQualityScores.push(quality.qualityScore);
   if (state.currentSetReps >= REPS_PER_SET) recordCompletedSet();
@@ -1533,7 +1488,6 @@ function registerRejectedCurl(quality) {
   state.setRejectedReps += 1;
   state.formWarnings += 1;
   state.setWarnings += 1;
-  state.lastFormWarning = quality.message;
   state.rejectionReasons[quality.reason] = (state.rejectionReasons[quality.reason] || 0) + 1;
   state.qualityScores.push(quality.qualityScore);
   state.setQualityScores.push(quality.qualityScore);
@@ -1760,47 +1714,6 @@ function extensionForMimeType(mimeType) {
   return mimeType.includes("mp4") ? "mp4" : "webm";
 }
 
-function extensionForFilename(filename) {
-  const extension = filename.split(".").pop()?.toLowerCase();
-  return extension && extension !== filename.toLowerCase() ? extension : "";
-}
-
-function mimeTypeForFile(file) {
-  if (file.type) return file.type;
-  const extension = extensionForFilename(file.name);
-  return {
-    avi: "video/x-msvideo",
-    m4v: "video/x-m4v",
-    mkv: "video/x-matroska",
-    mov: "video/quicktime",
-    mp4: "video/mp4",
-    webm: "video/webm",
-    wmv: "video/x-ms-wmv",
-  }[extension] || "video/mp4";
-}
-
-function videoExtensionForFile(file) {
-  return extensionForFilename(file.name) || extensionForMimeType(mimeTypeForFile(file));
-}
-
-function videoDuration(file) {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.onloadedmetadata = () => {
-      const duration = Number.isFinite(video.duration) ? video.duration : 0;
-      URL.revokeObjectURL(url);
-      resolve(duration);
-    };
-    video.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(0);
-    };
-    video.src = url;
-  });
-}
-
 async function startRecording() {
   if (state.recording) return;
   if (!state.liveActive || !state.countingEnabled) {
@@ -1817,8 +1730,6 @@ async function startRecording() {
   state.setRejectedReps = 0;
   state.setQualityScores = [];
   state.lastSpokenRep = 0;
-  state.curlPhase = "unknown";
-  state.torsoAnchorX = null;
   state.curlQualityTracker?.reset();
   if (!state.stream) {
     await startCamera();
@@ -1895,8 +1806,10 @@ function makeDownloads() {
     type: "application/json",
   });
 
+  if (els.videoDownload.href) URL.revokeObjectURL(els.videoDownload.href);
   els.videoDownload.href = URL.createObjectURL(videoBlob);
   els.videoDownload.download = `${basename}.${extension}`;
+  if (els.metadataDownload.href) URL.revokeObjectURL(els.metadataDownload.href);
   els.metadataDownload.href = URL.createObjectURL(metadataBlob);
   els.metadataDownload.download = `${basename}.json`;
   els.downloads.hidden = false;

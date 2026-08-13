@@ -6,6 +6,9 @@
     "CAPTURE_STORAGE_CONNECTION_STRING": "your_storage_connection_string",
     "CAPTURE_CONTAINER": "captures",
     "PROCESSED_CONTAINER": "processed",
+    "AZURE_MINIAPP_API_TOKEN": "generate-an-independent-32-character-or-longer-secret",
+    "AZURE_INGEST_API_TOKEN": "generate-a-different-32-character-or-longer-secret",
+    "AZURE_PROCESSOR_API_TOKEN": "generate-a-third-32-character-or-longer-secret",
     "ALLOWED_ORIGINS": "https://omarglezparra.github.io,http://localhost:8080,http://127.0.0.1:8080"
   }
 }

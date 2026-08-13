@@ -1,20 +1,37 @@
 {
   "expo": {
-    "name": "Curl Vision Foundry",
-    "slug": "curl-vision-foundry-mobile",
+    "name": "AI Javier Coach",
+    "slug": "ai-javier-coach-mentra",
     "version": "1.0.0",
+    "scheme": "aijaviercoach",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
+      "bundleIdentifier": "com.aijaviercoach.ml1",
       "supportsTablet": true,
       "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "AI Javier Coach connects to Mentra Live over Bluetooth to record your workout sets.",
         "NSCameraUsageDescription": "Curl Vision Foundry uses the front camera to capture exercise videos for your personal coach dataset.",
+        "NSLocalNetworkUsageDescription": "AI Javier Coach can send Mentra Live recordings to your private workout processing service.",
+        "NSMicrophoneUsageDescription": "AI Javier Coach uses microphone access only for supported Mentra Live voice features; workout video capture is muted.",
         "NSPhotoLibraryUsageDescription": "Curl Vision Foundry reads HeyCyan/BV100 workout videos from Photos and saves labeled clips for your personal coach dataset.",
-        "NSPhotoLibraryAddUsageDescription": "Curl Vision Foundry saves labeled exercise clips to your photo library."
+        "NSPhotoLibraryAddUsageDescription": "Curl Vision Foundry saves labeled exercise clips to your photo library.",
+        "UIBackgroundModes": [
+          "bluetooth-central"
+        ]
       }
     },
     "android": {
+      "package": "com.aijaviercoach.ml1",
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -25,6 +42,31 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "@mentra/bluetooth-sdk",
+        {
+          "node": true,
+          "analytics": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 28,
+            "packagingOptions": {
+              "pickFirst": [
+                "**/libc++_shared.so",
+                "**/libonnxruntime.so",
+                "**/libonnxruntime4j_jni.so"
+              ]
+            }
+          }
+        }
+      ],
+      "expo-secure-store"
+    ]
   }
 }

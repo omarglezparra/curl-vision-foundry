@@ -5,7 +5,6 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
-import math
 from pathlib import Path
 from typing import Any, Iterable
 

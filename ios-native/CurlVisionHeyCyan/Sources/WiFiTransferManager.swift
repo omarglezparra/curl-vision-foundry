@@ -45,7 +45,12 @@ final class WiFiTransferManager: ObservableObject {
         let fileURL = baseURL.appendingPathComponent("files").appendingPathComponent(newest.filename)
         appendLog("Downloading \(fileURL.absoluteString)")
         let (tempURL, response) = try await URLSession.shared.download(from: fileURL)
-        try ensureOK(response)
+        do {
+            try ensureOK(response)
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw error
+        }
 
         let destinationDirectory = try localCaptureDirectory()
         let destination = destinationDirectory.appendingPathComponent(newest.filename)
