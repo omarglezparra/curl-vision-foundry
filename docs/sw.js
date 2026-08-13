@@ -1,4 +1,4 @@
-const CACHE_NAME = "javier-ai-coach-v12-curl-quality";
+const CACHE_NAME = "javier-ai-coach-v13-smooth-start";
 const APP_SHELL = [
   "./",
   "./index.html",
