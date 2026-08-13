@@ -1,13 +1,16 @@
-const CACHE_NAME = "javier-ai-coach-v13-smooth-start";
+const CACHE_NAME = "javier-ai-coach-v14-adaptive-arm";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./curl-quality.js",
+  "./workout-planner.js",
   "./models/curl-quality-v1.json",
   "./config.js",
   "./manifest.webmanifest",
+  "./assets/javier-icon.svg",
+  "./assets/omar.jpg",
 ];
 
 self.addEventListener("install", (event) => {

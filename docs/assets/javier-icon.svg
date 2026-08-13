@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Javier AI Coach">
+  <rect width="512" height="512" rx="112" fill="#050607"/>
+  <circle cx="256" cy="256" r="188" fill="#0b241b" stroke="#1be28b" stroke-width="18"/>
+  <path d="M175 143h88v184c0 73-43 111-109 111-28 0-51-6-72-19l31-70c12 7 24 11 37 11 18 0 25-12 25-39V143Z" fill="#f4f7f5"/>
+  <path d="M292 143h84l75 295h-85l-12-58h-70l-12 58h-82l102-295Zm5 170h43l-20-102-23 102Z" fill="#1be28b"/>
+</svg>

@@ -680,6 +680,8 @@ def load_web_workout_history(
         statistics = document.get("statistics")
         if not isinstance(statistics, dict):
             continue
+        if statistics.get("status") == "in_progress" or document.get("status") == "in_progress":
+            continue
         summary = dict(statistics)
         next_session = document.get("next_session")
         if isinstance(next_session, dict) and "nextSessionPlan" not in summary:

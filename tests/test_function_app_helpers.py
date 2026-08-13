@@ -294,14 +294,22 @@ class FunctionAppProfileDeletionTests(unittest.TestCase):
     def test_web_workout_history_is_profile_scoped_sorted_and_limited(self) -> None:
         target = "web_" + "a" * 32
         other = "web_" + "b" * 32
-        def summary(profile_id: str, session_id: str, completed_at: str, reps: int) -> str:
+        def summary(
+            profile_id: str,
+            session_id: str,
+            completed_at: str | None,
+            reps: int,
+            status: str = "completed",
+        ) -> str:
             return json.dumps(
                 {
                     "profile_id": profile_id,
+                    "status": status,
                     "statistics": {
                         "id": session_id,
                         "completedAt": completed_at,
                         "reps": reps,
+                        "status": status,
                     },
                     "next_session": {"sessionNumber": reps},
                 }
@@ -321,6 +329,10 @@ class FunctionAppProfileDeletionTests(unittest.TestCase):
                     "processed",
                     f"profiles/{target}/workout-summaries/bad/workout-summary.json",
                 ): b"not-json",
+                (
+                    "processed",
+                    f"profiles/{target}/workout-summaries/active/workout-summary.json",
+                ): summary(target, "active", None, 4, status="in_progress"),
                 (
                     "processed",
                     f"profiles/{other}/workout-summaries/session-x/workout-summary.json",
