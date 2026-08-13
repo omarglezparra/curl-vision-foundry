@@ -3,8 +3,16 @@
   "short_name": "Javier AI",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#101316",
-  "theme_color": "#101316",
-  "description": "Coach de entrenamiento en vivo con la cámara del iPhone.",
+  "background_color": "#050607",
+  "theme_color": "#050607",
+  "description": "Coach personal de brazos con rutinas adaptativas, técnica en vivo e historial de progreso.",
+  "icons": [
+    {
+      "src": "./assets/javier-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
   "lang": "es"
 }

@@ -10,19 +10,99 @@
     <link rel="preconnect" href="https://storage.googleapis.com" crossorigin />
     <link rel="preload" href="https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task" as="fetch" crossorigin />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./assets/javier-icon.svg" type="image/svg+xml" />
     <title>Javier AI Coach</title>
-    <link rel="stylesheet" href="./styles.css?v=20260812-curl-quality-v12" />
+    <link rel="stylesheet" href="./styles.css?v=20260813-adaptive-arm-v14" />
   </head>
   <body>
-    <main class="camera-app">
-      <section class="camera-stage" aria-label="Cámara y entrenamiento en vivo">
+    <main id="consumer-app" class="consumer-app">
+      <section id="home-view" class="app-view home-view" aria-label="Inicio">
+        <header class="home-header">
+          <div class="profile-summary">
+            <img class="profile-avatar" src="./assets/omar.jpg" alt="Foto de perfil de Omar" />
+            <div>
+              <p id="home-greeting" class="home-eyebrow">Buenos días</p>
+              <h1>Omar</h1>
+              <p class="profile-goal-copy">Aumentar masa muscular en brazos</p>
+            </div>
+          </div>
+          <span id="home-sync-status" class="sync-badge"><i></i> Azure</span>
+        </header>
+
+        <section class="week-card" aria-label="Actividad de la semana">
+          <div class="section-heading compact">
+            <div><p class="section-kicker">Constancia</p><h2>Esta semana</h2></div>
+            <strong id="home-streak" class="streak-value">0 días</strong>
+          </div>
+          <div id="home-week" class="week-strip"></div>
+        </section>
+
+        <section class="today-card" aria-labelledby="today-plan-title">
+          <div class="today-card-glow"></div>
+          <div class="today-card-header">
+            <div>
+              <span class="today-label">ENTRENAMIENTO DE HOY</span>
+              <h2 id="home-plan-title">Brazos · Base técnica</h2>
+              <p id="home-plan-meta">3 ejercicios · 9 series · 35 min</p>
+            </div>
+            <span id="home-session-number" class="session-orbit">S1</span>
+          </div>
+          <p id="home-plan-reason" class="plan-reason"></p>
+          <div id="home-routine" class="home-routine"></div>
+          <button id="live-start" class="start-workout-button" type="button">
+            <span><strong>Empezar entrenamiento</strong><small>Javier te guía de principio a fin</small></span>
+            <span aria-hidden="true">→</span>
+          </button>
+        </section>
+
+        <section class="home-stats" aria-label="Resumen histórico">
+          <article><span>Sesiones</span><strong id="home-session-count">0</strong><small>históricas</small></article>
+          <article><span>Técnica</span><strong id="home-form-score">--</strong><small>media con IA</small></article>
+          <article><span>Volumen</span><strong id="home-total-reps">0</strong><small>reps registradas</small></article>
+        </section>
+
+        <section class="recent-section">
+          <div class="section-heading">
+            <div><p class="section-kicker">Diario de entrenamiento</p><h2>Sesiones recientes</h2></div>
+            <button id="home-open-history" class="text-button" type="button">Ver todas</button>
+          </div>
+          <div id="home-recent-sessions" class="recent-session-list"></div>
+        </section>
+      </section>
+
+      <section id="profile-view" class="app-view profile-view" hidden aria-label="Perfil y preferencias">
+        <header class="page-header">
+          <p class="section-kicker">Tu entrenador aprende de ti</p>
+          <h1>Perfil de Omar</h1>
+          <p>Estas preferencias se guardan con cada sesión y ajustan volumen, descansos y progresión.</p>
+        </header>
+        <section class="profile-card">
+          <img class="profile-avatar profile-avatar-large" src="./assets/omar.jpg" alt="Foto de perfil de Omar" />
+          <div><strong id="profile-card-name">Omar</strong><span id="profile-card-goal">Aumentar masa muscular en brazos</span></div>
+        </section>
+        <form id="profile-form" class="profile-form">
+          <label>Nombre<input id="profile-name" name="name" maxlength="40" autocomplete="name" /></label>
+          <label>Meta<select id="profile-goal" name="goal"><option>Aumentar masa muscular en brazos</option><option>Mejorar fuerza de brazos</option><option>Mejorar técnica y control</option></select></label>
+          <label>Experiencia<select id="profile-experience" name="experience"><option value="beginner">Principiante</option><option value="intermediate">Intermedio</option><option value="advanced">Avanzado</option></select></label>
+          <label>Equipo<select id="profile-equipment" name="equipment"><option value="dumbbells">Mancuernas</option><option value="bodyweight">Peso corporal</option><option value="gym">Gimnasio completo</option></select></label>
+          <label>Sesiones por semana<select id="profile-days" name="sessionsPerWeek"><option value="1">1 día</option><option value="2">2 días</option><option value="3">3 días</option><option value="4">4 días</option></select></label>
+          <label>Unidad de carga<select id="profile-unit" name="preferredUnit"><option value="lb">Libras</option><option value="kg">Kilogramos</option></select></label>
+          <button class="profile-save-button" type="submit">Guardar y recalcular mi rutina</button>
+          <p id="profile-save-status" class="form-status" aria-live="polite"></p>
+        </form>
+        <section class="privacy-card"><strong>Historial privado</strong><p>La app usa un identificador anónimo. Tu foto permanece dentro de la aplicación y los resúmenes se sincronizan con tu espacio de Azure.</p></section>
+      </section>
+
+      <section id="workout-view" class="app-view camera-stage" hidden aria-label="Cámara y entrenamiento en vivo">
         <video id="preview" playsinline muted autoplay></video>
         <canvas id="pose-overlay" aria-hidden="true"></canvas>
 
         <header class="camera-topbar">
-          <div>
+          <button id="workout-back" class="camera-back-button" type="button" aria-label="Pausar y volver al inicio">‹</button>
+          <div class="camera-title-group">
             <p class="brand">JAVIER AI</p>
             <h1 id="drill-title">Curl estricto</h1>
+            <span id="active-set-label" class="active-set-label">Serie 1 de 3</span>
           </div>
           <div class="top-stats">
             <div class="rep-counter"><strong id="live-reps">0</strong><span>reps</span></div>
@@ -49,13 +129,42 @@
         </div>
 
         <div class="workflow-steps" aria-label="Progreso del entrenamiento">
-          <span id="step-start" class="workflow-step active">1 · Empezar</span>
-          <span id="step-complete" class="workflow-step">2 · Completar 8 reps válidas</span>
+          <span id="step-start" class="workflow-step active">1 · Preparar</span>
+          <span id="step-complete" class="workflow-step">2 · Completar rutina</span>
+        </div>
+
+        <aside id="workout-plan-sheet" class="workout-plan-sheet" aria-label="Serie actual">
+          <div class="workout-sheet-heading">
+            <div><span id="active-exercise-muscle">Bíceps</span><strong id="active-exercise-name">Curl estricto</strong></div>
+            <button id="workout-sheet-toggle" type="button" aria-label="Mostrar u ocultar rutina">⌃</button>
+          </div>
+          <div class="target-chips">
+            <span><strong id="active-target">10</strong> reps</span>
+            <span>RIR <strong id="active-rir">2</strong></span>
+            <span><strong id="active-rest">90</strong>s descanso</span>
+            <label id="camera-weight-control" class="camera-weight-control"><input id="camera-weight" type="number" min="0" step="0.5" inputmode="decimal" placeholder="Carga" /><em id="camera-weight-unit">lb</em></label>
+          </div>
+          <p id="active-cue" class="active-cue">Codo estable y bajada controlada.</p>
+          <div id="routine-progress-list" class="routine-progress-list"></div>
+          <div id="manual-set-controls" class="manual-set-controls" hidden>
+            <div class="manual-field rep-stepper"><span>Repeticiones</span><div><button id="manual-reps-minus" type="button">−</button><strong id="manual-reps">10</strong><button id="manual-reps-plus" type="button">+</button></div></div>
+            <label class="manual-field"><span>Carga</span><div class="weight-input"><input id="manual-weight" type="number" min="0" step="0.5" inputmode="decimal" /><em id="manual-weight-unit">lb</em></div></label>
+            <label class="manual-field"><span>RIR real</span><select id="manual-rir"><option value="4">4+</option><option value="3">3</option><option value="2" selected>2</option><option value="1">1</option><option value="0">0 · fallo técnico</option></select></label>
+            <button id="manual-complete-set" class="manual-complete-button" type="button">Completar serie</button>
+          </div>
+        </aside>
+
+        <div id="rest-overlay" class="rest-overlay" hidden>
+          <span>DESCANSO</span>
+          <strong id="rest-time">01:30</strong>
+          <p id="rest-next">Siguiente: serie 2</p>
+          <div class="rest-progress"><i id="rest-progress-bar"></i></div>
+          <button id="rest-skip" type="button">Saltar descanso</button>
         </div>
 
         <div class="camera-controls" aria-label="Controles de Javier AI">
           <button id="camera-start" class="control-button control-primary" type="button">Activar cámara</button>
-          <button id="live-start" class="control-button control-primary" type="button">Empezar entrenamiento</button>
+          <button id="workout-pause" class="control-button control-primary" type="button">Pausar</button>
           <button id="record" class="control-button control-record" type="button">Grabar set</button>
           <button id="voice-toggle" class="control-button" type="button">Voz ON</button>
           <button id="switch-camera" class="control-button" type="button">Cambiar cámara</button>
@@ -97,7 +206,7 @@
           <div id="dashboard-save-log" class="save-log" aria-live="polite"></div>
           <div class="dashboard-columns">
             <div class="dashboard-card">
-              <div class="card-heading"><h3>Detalle de la sesión</h3><span id="dashboard-session-status" class="status-pill">8/8 reps</span></div>
+              <div class="card-heading"><h3>Detalle de la sesión</h3><span id="dashboard-session-status" class="status-pill">Rutina completa</span></div>
               <div id="dashboard-set-list" class="set-list"></div>
             </div>
             <div class="dashboard-card">
@@ -202,7 +311,7 @@
         <div id="steps"></div>
         <div id="live-progress-bar"></div>
         <h2 id="panel-title">Curl estricto</h2>
-        <p id="target">Objetivo: 1 sesión de 8 repeticiones válidas</p>
+        <p id="target">Objetivo adaptativo de la sesión</p>
         <strong id="counter">1/1</strong>
         <div id="cues"></div>
         <strong id="session-id"></strong>
@@ -216,8 +325,14 @@
           <button id="save-azure" type="button">Guardar Azure</button>
         </div>
       </section>
+      <nav id="app-navigation" class="app-navigation" aria-label="Navegación principal">
+        <button class="app-nav-button active" type="button" data-app-view="home" aria-current="page"><span aria-hidden="true">⌂</span><small>Inicio</small></button>
+        <button class="app-nav-button" type="button" data-app-view="workout"><span aria-hidden="true">＋</span><small>Entrenar</small></button>
+        <button class="app-nav-button" type="button" data-app-view="progress"><span aria-hidden="true">↗</span><small>Progreso</small></button>
+        <button class="app-nav-button" type="button" data-app-view="profile"><span aria-hidden="true">●</span><small>Perfil</small></button>
+      </nav>
     </main>
-    <script src="./config.js?v=20260813-smooth-start-v13"></script>
-    <script type="module" src="./app.js?v=20260813-smooth-start-v13"></script>
+    <script src="./config.js?v=20260813-adaptive-arm-v14"></script>
+    <script type="module" src="./app.js?v=20260813-adaptive-arm-v14"></script>
   </body>
 </html>
