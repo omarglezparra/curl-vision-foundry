@@ -13,11 +13,6 @@ final class GlassesBLEManager: NSObject, ObservableObject {
     private var connectedPeripheral: CBPeripheral?
     private var writableCharacteristic: CBCharacteristic?
 
-    private let knownServiceUUIDs: [CBUUID] = [
-        CBUUID(string: "7905FFF0-B5CE-4E99-A40F-4B1E122D00D0"),
-        CBUUID(string: "6E40FFF0-B5A3-F393-E0A9-E50E24DCCA9E")
-    ]
-
     override init() {
         super.init()
         central = CBCentralManager(delegate: self, queue: nil)
@@ -25,6 +20,7 @@ final class GlassesBLEManager: NSObject, ObservableObject {
 
     func scan() {
         devices.removeAll()
+        peripherals.removeAll()
         appendLog("Starting BLE scan")
         central.scanForPeripherals(withServices: nil, options: [
             CBCentralManagerScanOptionAllowDuplicatesKey: false

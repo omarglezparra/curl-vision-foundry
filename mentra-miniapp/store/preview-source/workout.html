@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AI Javier Coach · Workout preview</title>
+    <link rel="stylesheet" href="../../public/styles.css" />
+    <link rel="stylesheet" href="preview.css" />
+  </head>
+  <body>
+    <div class="preview-frame">
+    <main>
+      <header>
+        <p class="kicker">Mentra Live · ml1</p>
+        <h1>AI Javier Coach</h1>
+        <p class="lede">Graba una sesión continua y revisa tu técnica de curls.</p>
+      </header>
+      <nav aria-label="Secciones">
+        <button class="tab active">Entrenar</button><button class="tab">Rendimiento</button>
+      </nav>
+      <section class="panel active">
+        <article class="status-card">
+          <div><span>grabando</span><strong>12:48</strong></div><i id="status-dot" class="live"></i>
+        </article>
+        <article class="card">
+          <h2>Tu sesión</h2>
+          <p>Grabando tu sesión continua. Mantén tu cuerpo visible en el espejo.</p>
+          <button class="primary stop">Finalizar sesión</button>
+          <aside class="privacy-note">
+            <strong>Grabación y privacidad</strong>
+            <p>
+              Al iniciar, las gafas suben video y audio de forma continua a Azure para analizar tu
+              ejercicio. La luz de captura permanece encendida. Tú decides cuándo iniciar y
+              finalizar; avisa y evita grabar a otras personas sin su permiso.
+            </p>
+          </aside>
+        </article>
+        <article class="card">
+          <h2>Espejo y rotación</h2>
+          <label><span>Entreno frente a un espejo</span><input type="checkbox" checked disabled /></label>
+          <label><span>La imagen de origen ya está espejada</span><input type="checkbox" disabled /></label>
+          <button class="setting" disabled><span>Rotación al analizar</span><b>0°</b></button>
+          <p class="preference-status">Ajustes guardados.</p>
+        </article>
+      </section>
+      <p id="error"></p>
+    </main>
+    </div>
+  </body>
+</html>

@@ -88,6 +88,25 @@ class RepLogger:
                 )
             writer.writerow(row)
 
+    def export_session(self, destination: Path) -> int:
+        """Save only this workout's rows next to its recording."""
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        rows: list[dict[str, str]] = []
+        if self.path.exists():
+            with self.path.open("r", newline="", encoding="utf-8-sig") as file:
+                rows = [
+                    row
+                    for row in csv.DictReader(file)
+                    if row.get("session_id") == self.session_id
+                ]
+
+        with destination.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({field: row.get(field, "") for field in FIELDNAMES})
+        return len(rows)
+
     def _ensure_schema(self) -> None:
         if not self.path.exists():
             return

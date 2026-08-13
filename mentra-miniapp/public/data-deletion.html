@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#071c34" />
+    <title>Delete Your Data · AI Javier Coach</title>
+    <link rel="icon" href="/assets/app-icon.png" />
+    <link rel="stylesheet" href="/legal.css" />
+  </head>
+  <body>
+    <main>
+      <header><p class="kicker">AI Javier Coach</p><h1>Delete Your Data</h1><p>Remove stored workout information</p></header>
+      <h2>Delete from the signed-in MiniApp</h2>
+      <ol>
+        <li>Open AI Javier Coach from the Mentra app.</li>
+        <li>Stop any active workout recording.</li>
+        <li>At the bottom of the workout screen, choose <strong>Delete my data</strong>.</li>
+        <li>Confirm the irreversible deletion prompt.</li>
+      </ol>
+      <p>
+        This deletes raw captures, derived workout rows, manifests, saved stream state, and saved
+        camera-orientation preferences associated with the MiniApp's pseudonymous profile identifier.
+        It does not delete your Mentra account or information controlled independently by Mentra.
+      </p>
+      <h2>If you need help</h2>
+      <p>
+        Email <a href="mailto:{{SUPPORT_EMAIL_URL}}">{{SUPPORT_EMAIL}}</a> for help using the in-app
+        deletion control. Workout storage uses a pseudonymous identifier and does not keep an email-to-profile
+        lookup, so an email address alone cannot identify data for deletion. We will never ask for your password
+        or API key.
+      </p>
+      <h2>Automatic deletion</h2>
+      <p>
+        Azure lifecycle rules make raw-capture blobs eligible for automatic deletion
+        {{RAW_CAPTURE_RETENTION_DAYS}} days after their last modification. Scheduled processing removes
+        individual derived workout rows when their capture is older than
+        {{DERIVED_DATA_RETENTION_DAYS}} days; shared derived files also have an Azure lifecycle backstop
+        when they stop being updated. Azure processes deletions asynchronously. A failed-transfer segment
+        may remain on the restricted production ingest host for up to 24 hours; it is discarded
+        immediately when Azure reports that its profile was deleted. A deletion tombstone containing
+        only the pseudonymous profile identifier and deletion time may remain for up to
+        {{DERIVED_DATA_RETENTION_DAYS}} days to stop delayed uploads from restoring deleted data. Limited
+        security logs may remain for the hosting provider's configured log-retention period.
+      </p>
+      <nav aria-label="Legal and app links"><a href="/privacy">Privacy</a><a href="/support">Support</a><a href="/webview">Open MiniApp</a></nav>
+      <footer>Operated by {{APP_OPERATOR_NAME}}</footer>
+    </main>
+  </body>
+</html>

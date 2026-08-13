@@ -1,0 +1,21 @@
+{
+    "name":  "AI Javier Coach",
+    "description":  "Record a hands-free curl workout with Mentra Live, analyze repetitions and form in Azure, and review performance from the phone webview.",
+    "publicUrl":  "https://ai-javier-coach.yellowmoss-ace59a4f.eastus.azurecontainerapps.io",
+    "logoURL":  "https://ai-javier-coach.yellowmoss-ace59a4f.eastus.azurecontainerapps.io/assets/app-icon.png",
+    "webviewURL":  "https://ai-javier-coach.yellowmoss-ace59a4f.eastus.azurecontainerapps.io/webview",
+    "appType":  "standard",
+    "permissions":  [
+                        {
+                            "type":  "CAMERA",
+                            "description":  "Record the workout only after the user presses Start so AI Javier can analyze curl repetitions and form."
+                        }
+                    ],
+    "settings":  [
+
+                 ],
+    "tools":  [
+
+              ],
+    "version":  "0.1.0"
+}

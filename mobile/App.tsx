@@ -2,6 +2,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import MentraCoachModal from './src/MentraCoachModal';
 import {
   Alert,
   AppState,
@@ -197,8 +198,8 @@ function buildMetadata(clip: SessionClip, sessionId: string) {
     source: clip.source === 'bv100_photos' ? 'heycyan_bv100_iphone_photos_auto_import' : 'iphone_expo_camera',
     source_asset_id: clip.assetId,
     source_filename: clip.filename,
-    training_intent: clip.label === 'good_form' ? 'good_form_only' : 'mixed',
-    use_for_training: clip.exercise === 'biceps_curl',
+    training_intent: 'unreviewed',
+    use_for_training: false,
     video_file: videoFile,
     video_mime_type: clip.videoMimeType,
     azure_blob_prefix: blobPrefix,
@@ -230,6 +231,7 @@ export default function App() {
   const [uploadCount, setUploadCount] = useState(0);
   const [autoImportEnabled, setAutoImportEnabled] = useState(false);
   const [bv100Status, setBv100Status] = useState('HeyCyan listo');
+  const [mentraVisible, setMentraVisible] = useState(false);
 
   const selectedDrill = DRILLS[selectedIndex];
   const sessionId = useMemo(() => workoutId, [workoutId]);
@@ -307,19 +309,23 @@ export default function App() {
   }
 
   async function toggleBv100AutoImport() {
-    if (!hasMediaPermission) {
-      await requestMediaPermission();
-    }
+    try {
+      if (!hasMediaPermission) {
+        await requestMediaPermission();
+      }
 
-    if (autoImportEnabled) {
-      setAutoImportEnabled(false);
-      setBv100Status('HeyCyan pausado');
-      return;
-    }
+      if (autoImportEnabled) {
+        setAutoImportEnabled(false);
+        setBv100Status('HeyCyan pausado');
+        return;
+      }
 
-    await primeBv100SeenAssets();
-    setAutoImportEnabled(true);
-    setBv100Status('Esperando videos nuevos');
+      await primeBv100SeenAssets();
+      setAutoImportEnabled(true);
+      setBv100Status('Esperando videos nuevos');
+    } catch (error) {
+      setBv100Status(`Error HeyCyan: ${String(error)}`);
+    }
   }
 
   async function scanBv100Videos(includeExisting: boolean) {
@@ -568,6 +574,14 @@ export default function App() {
         <Pressable style={styles.primaryButton} onPress={requestPermissions}>
           <Text style={styles.primaryButtonText}>Activar permisos</Text>
         </Pressable>
+        <Pressable style={styles.mentraEntryButton} onPress={() => setMentraVisible(true)}>
+          <Text style={styles.mentraEntryText}>Usar Mentra Live</Text>
+        </Pressable>
+        <MentraCoachModal
+          visible={mentraVisible}
+          onClose={() => setMentraVisible(false)}
+          sessionId={sessionId}
+        />
       </SafeAreaView>
     );
   }
@@ -717,8 +731,18 @@ export default function App() {
           <Text style={styles.detailsButtonText}>Detalles de sesion</Text>
         </Pressable>
 
+        <Pressable style={styles.mentraEntryButton} onPress={() => setMentraVisible(true)}>
+          <Text style={styles.mentraEntryText}>Entrenar con Mentra Live</Text>
+        </Pressable>
+
         {lastClipUri ? <Text style={styles.savedText}>Ultimo clip guardado en Fotos</Text> : null}
       </View>
+
+      <MentraCoachModal
+        visible={mentraVisible}
+        onClose={() => setMentraVisible(false)}
+        sessionId={sessionId}
+      />
 
       <Modal
         animationType="slide"
@@ -856,6 +880,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     marginBottom: 28,
+  },
+  mentraEntryButton: {
+    minHeight: 48,
+    borderRadius: 8,
+    backgroundColor: '#172a36',
+    borderWidth: 1,
+    borderColor: '#3e6174',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  mentraEntryText: {
+    color: '#9be0bd',
+    fontSize: 15,
+    fontWeight: '900',
   },
   cameraArea: {
     flex: 1,

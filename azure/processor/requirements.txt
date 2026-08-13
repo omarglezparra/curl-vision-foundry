@@ -1,0 +1,6 @@
+azure-identity==1.25.3
+azure-storage-blob==12.30.0
+mediapipe==1.0.0
+numpy==2.4.6
+opencv-python-headless==5.0.0.93
+python-dotenv==1.2.2

@@ -4,13 +4,13 @@ struct CaptureMetadataFactory {
     static func makeMetadata(for clip: WorkoutClip) -> CaptureMetadata {
         let extensionValue = clip.localURL.pathExtension.isEmpty ? "mp4" : clip.localURL.pathExtension.lowercased()
         let videoFile = "video.\(extensionValue)"
-        let prefix = "good_form/mirror_bv100/\(clip.sessionId)/\(clip.id)"
+        let prefix = "unlabeled/mirror_bv100/\(clip.sessionId)/\(clip.id)"
 
         return CaptureMetadata(
             capture_id: clip.id,
             session_id: clip.sessionId,
             workout_id: clip.sessionId,
-            label: "good_form",
+            label: "unlabeled",
             exercise: "biceps_curl",
             camera_angle: "mirror_bv100",
             capture_type: "set",
@@ -21,8 +21,8 @@ struct CaptureMetadataFactory {
             created_at: isoString(),
             source: "heycyan_bv100_native_ios",
             source_filename: clip.originalFilename,
-            training_intent: "good_form_only",
-            use_for_training: true,
+            training_intent: "unreviewed",
+            use_for_training: false,
             video_file: videoFile,
             video_mime_type: mimeType(forExtension: extensionValue),
             azure_blob_prefix: prefix,

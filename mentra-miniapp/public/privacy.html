@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#071c34" />
+    <title>Privacy Policy · AI Javier Coach</title>
+    <link rel="icon" href="/assets/app-icon.png" />
+    <link rel="stylesheet" href="/legal.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="kicker">AI Javier Coach</p>
+        <h1>Privacy Policy</h1>
+        <p>Effective {{POLICY_EFFECTIVE_DATE}} · Operator: {{APP_OPERATOR_NAME}}</p>
+      </header>
+
+      <p class="notice">
+        Recording begins only after you press Start and ends when you press Stop. The capture light
+        on Mentra Live remains active while recording. Do not record bystanders without permission.
+      </p>
+
+      <h2>Information we process</h2>
+      <ul>
+        <li>Workout camera video. Depending on the Mentra Live stream supplied by the device, the video file may also contain ambient audio.</li>
+        <li>Workout timing, mirror and rotation settings, connection state, battery level, and stream diagnostics.</li>
+        <li>Derived exercise measurements such as repetitions, range of motion, speed, and form warnings.</li>
+        <li>A pseudonymous identifier derived from your Mentra user ID. We do not store your raw Mentra user ID in workout storage.</li>
+        <li>Limited service and security logs needed to operate and protect the app.</li>
+      </ul>
+
+      <h2>Why we process it</h2>
+      <p>
+        We use this information to receive the workout you request, analyze curl movement, return
+        performance history, preserve your camera-orientation settings, prevent abuse, and maintain
+        service reliability. Raw workout recordings are marked as not approved for model training;
+        we will not use them to train a model without a separate, explicit opt-in.
+      </p>
+
+      <h2>Permissions and service providers</h2>
+      <p>
+        The MiniApp requests the Mentra <strong>Camera</strong> permission. Mentra transports the
+        session between your glasses and this MiniApp. Microsoft Azure hosts encrypted private
+        storage, the capture API, and workout processing. These providers may process technical data
+        under their own applicable terms. We do not sell personal information or use it for targeted advertising.
+      </p>
+
+      <h2>Retention</h2>
+      <p>
+        Azure lifecycle rules make raw-capture blobs eligible for automatic deletion
+        {{RAW_CAPTURE_RETENTION_DAYS}} days after their last modification. Scheduled processing removes
+        individual derived workout rows when their capture is older than
+        {{DERIVED_DATA_RETENTION_DAYS}} days; the shared derived files also have an Azure lifecycle
+        backstop when they stop being updated. Azure processes deletions asynchronously, so removal can
+        occur after the threshold. Operational logs may follow the shorter retention configured by the
+        hosting provider. Failed-transfer segments on the restricted production ingest host are purged
+        within 24 hours. A pseudonymous deletion tombstone may remain for up to
+        {{DERIVED_DATA_RETENTION_DAYS}} days solely to prevent a delayed upload from restoring deleted
+        data. You may delete workout data sooner at any time.
+      </p>
+
+      <h2>Your choices</h2>
+      <p>
+        You control when recording starts and stops. The signed-in webview includes an
+        <em>Delete my data</em> control. Follow the
+        <a href="/data-deletion">data-deletion instructions</a>, or email
+        <a href="mailto:{{SUPPORT_EMAIL_URL}}">{{SUPPORT_EMAIL}}</a> for help using that authenticated
+        control. We do not maintain an email-to-pseudonymous-profile lookup and will never ask for your password.
+      </p>
+
+      <h2>Security, transfers, and children</h2>
+      <p>
+        We use encrypted transport, private storage, pseudonymous workout paths, time-limited stream
+        credentials, and access controls. No system is perfectly secure. Data may be processed in the
+        United States or another region selected for the Azure deployment. This fitness tool is not
+        directed to children who cannot legally consent to its use; a parent or guardian must approve
+        use where local law requires it.
+      </p>
+
+      <h2>Changes and contact</h2>
+      <p>
+        We will update the effective date when this policy materially changes. Questions or privacy
+        requests can be sent to <a href="mailto:{{SUPPORT_EMAIL_URL}}">{{SUPPORT_EMAIL}}</a>.
+      </p>
+
+      <nav aria-label="Legal and support links">
+        <a href="/terms">Terms</a><a href="/support">Support</a><a href="/webview">Open MiniApp</a>
+      </nav>
+      <footer>© AI Javier Coach · {{APP_OPERATOR_NAME}}</footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "source": {
+    "file": "C:\\Users\\omarg\\Downloads\\curl trining.mp4",
+    "duration_seconds": 379.882667,
+    "sha256": "457782D0304DC09AA300714A287BE625A0736DF4C3B897D4AB6B0D267093D751",
+    "rights_status": "unverified"
+  },
+  "output": {
+    "clip_count": 24,
+    "total_decoded_duration_seconds": 379.901,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "resolution": "1920x1040",
+    "frame_rate": 30,
+    "all_clips_decode_successfully": true
+  },
+  "training_use_values": {
+    "candidate": "Real exercise footage long enough for labeling; verify rights and technique labels first.",
+    "review_short": "Real exercise footage under five seconds; manually review before including.",
+    "reference_only": "Useful instructionally but unsuitable for real-person pose training.",
+    "exclude_non_exercise": "Not exercise footage and must not enter the pose-training dataset."
+  },
+  "clips": [
+    { "clip": 1, "file": "clip_001.mp4", "start_seconds": 0.0, "end_seconds": 8.17, "duration_seconds": 8.221, "label": "dumbbell_curl_side_form", "training_use": "candidate" },
+    { "clip": 2, "file": "clip_002.mp4", "start_seconds": 8.17, "end_seconds": 21.07, "duration_seconds": 12.866, "label": "dumbbell_curl_elbow_coaching", "training_use": "candidate" },
+    { "clip": 3, "file": "clip_003.mp4", "start_seconds": 21.07, "end_seconds": 45.73, "duration_seconds": 24.667, "label": "hammer_curl_tutorial", "training_use": "candidate" },
+    { "clip": 4, "file": "clip_004.mp4", "start_seconds": 45.73, "end_seconds": 62.1, "duration_seconds": 16.367, "label": "dumbbell_curl_form_comparison", "training_use": "candidate" },
+    { "clip": 5, "file": "clip_005.mp4", "start_seconds": 62.1, "end_seconds": 111.53, "duration_seconds": 49.433, "label": "incline_dumbbell_curl_tutorial", "training_use": "candidate" },
+    { "clip": 6, "file": "clip_006.mp4", "start_seconds": 111.53, "end_seconds": 163.17, "duration_seconds": 51.633, "label": "animated_curl_errors", "training_use": "reference_only" },
+    { "clip": 7, "file": "clip_007.mp4", "start_seconds": 163.17, "end_seconds": 192.47, "duration_seconds": 29.333, "label": "barbell_curl_tutorial_outdoor", "training_use": "candidate" },
+    { "clip": 8, "file": "clip_008.mp4", "start_seconds": 192.47, "end_seconds": 233.57, "duration_seconds": 41.1, "label": "dumbbell_curl_form_blue_wall", "training_use": "candidate" },
+    { "clip": 9, "file": "clip_009.mp4", "start_seconds": 233.57, "end_seconds": 251.83, "duration_seconds": 18.233, "label": "cable_curl_tutorial", "training_use": "candidate" },
+    { "clip": 10, "file": "clip_010.mp4", "start_seconds": 251.83, "end_seconds": 254.53, "duration_seconds": 2.7, "label": "cable_curl_broll", "training_use": "review_short" },
+    { "clip": 11, "file": "clip_011.mp4", "start_seconds": 254.53, "end_seconds": 257.27, "duration_seconds": 2.767, "label": "hair_curl_non_exercise", "training_use": "exclude_non_exercise" },
+    { "clip": 12, "file": "clip_012.mp4", "start_seconds": 257.27, "end_seconds": 264.63, "duration_seconds": 7.333, "label": "incline_curl_comparison", "training_use": "candidate" },
+    { "clip": 13, "file": "clip_013.mp4", "start_seconds": 264.63, "end_seconds": 290.8, "duration_seconds": 26.167, "label": "dumbbell_curl_front_and_side", "training_use": "candidate" },
+    { "clip": 14, "file": "clip_014.mp4", "start_seconds": 290.8, "end_seconds": 293.63, "duration_seconds": 2.833, "label": "incline_curl_microclip", "training_use": "review_short" },
+    { "clip": 15, "file": "clip_015.mp4", "start_seconds": 293.63, "end_seconds": 295.47, "duration_seconds": 1.833, "label": "hair_curl_non_exercise", "training_use": "exclude_non_exercise" },
+    { "clip": 16, "file": "clip_016.mp4", "start_seconds": 295.47, "end_seconds": 305.77, "duration_seconds": 10.333, "label": "barbell_curl_explanation", "training_use": "candidate" },
+    { "clip": 17, "file": "clip_017.mp4", "start_seconds": 305.77, "end_seconds": 309.43, "duration_seconds": 3.633, "label": "concentration_curl_microclip", "training_use": "review_short" },
+    { "clip": 18, "file": "clip_018.mp4", "start_seconds": 309.43, "end_seconds": 314.3, "duration_seconds": 4.867, "label": "barbell_curl_torso_cue", "training_use": "review_short" },
+    { "clip": 19, "file": "clip_019.mp4", "start_seconds": 314.3, "end_seconds": 315.57, "duration_seconds": 1.3, "label": "curl_demo_monochrome", "training_use": "review_short" },
+    { "clip": 20, "file": "clip_020.mp4", "start_seconds": 315.57, "end_seconds": 319.67, "duration_seconds": 4.1, "label": "preacher_curl_comparison", "training_use": "review_short" },
+    { "clip": 21, "file": "clip_021.mp4", "start_seconds": 319.67, "end_seconds": 328.63, "duration_seconds": 8.933, "label": "drag_curl_barbell", "training_use": "candidate" },
+    { "clip": 22, "file": "clip_022.mp4", "start_seconds": 328.63, "end_seconds": 330.6, "duration_seconds": 1.967, "label": "supine_barbell_curl_microclip", "training_use": "review_short" },
+    { "clip": 23, "file": "clip_023.mp4", "start_seconds": 330.6, "end_seconds": 332.53, "duration_seconds": 1.933, "label": "hair_curl_non_exercise", "training_use": "exclude_non_exercise" },
+    { "clip": 24, "file": "clip_024.mp4", "start_seconds": 332.53, "end_seconds": 379.882667, "duration_seconds": 47.349, "label": "dumbbell_curl_purple_gym", "training_use": "candidate" }
+  ]
+}

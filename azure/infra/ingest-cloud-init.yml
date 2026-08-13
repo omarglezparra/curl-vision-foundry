@@ -1,0 +1,14 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+packages:
+  - ca-certificates
+  - certbot
+  - docker.io
+  - docker-compose-v2
+runcmd:
+  - [systemctl, enable, --now, docker]
+  - [usermod, -aG, docker, "{{ADMIN_USERNAME}}"]
+  - [mkdir, -p, /opt/ai-javier-ingest/app, /opt/ai-javier-ingest/certs]
+  - [chown, -R, "{{ADMIN_USERNAME}}:{{ADMIN_USERNAME}}", /opt/ai-javier-ingest/app]
+  - [chmod, "0750", /opt/ai-javier-ingest, /opt/ai-javier-ingest/app, /opt/ai-javier-ingest/certs]

@@ -808,7 +808,7 @@ def create_upload(req: func.HttpRequest) -> func.HttpResponse:
         capture_id = safe_segment(body.get("capture_id") or str(uuid.uuid4()), "capture")
         video_mime_type = body.get("video_mime_type", "video/webm")
         extension = video_extension(video_mime_type, body.get("video_file_extension", ""))
-    except (KeyError, ValueError) as exc:
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
         return json_response({"error": f"Invalid request body: {exc}"}, status_code=400, origin=origin)
 
     safe_prefix = f"{label}/{camera_angle}/{session_id}/{capture_id}"
@@ -911,7 +911,7 @@ def register_capture(req: func.HttpRequest) -> func.HttpResponse:
         camera_angle = safe_segment(body.get("camera_angle"), "unknown")
         video_blob = body["video_blob"]
         metadata_blob = body["metadata_blob"]
-    except (KeyError, ValueError) as exc:
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
         return json_response({"error": f"Invalid request body: {exc}"}, status_code=400, origin=origin)
 
     processed_container = setting("PROCESSED_CONTAINER", "processed")
